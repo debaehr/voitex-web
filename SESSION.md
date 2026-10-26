@@ -1,6 +1,6 @@
 # SESSION STATE — voitex-web
 
-> **Letztes Update:** 261026_2150 · **von:** Claude Opus 5.5
+> **Letztes Update:** 261026_2205 · **von:** Claude Opus 5.5
 > **Branch:** main · **Node:** tool-01
 
 <!--
@@ -21,7 +21,8 @@
 
 Etappe 2 (F-005, F-008–F-011), Specs freigegeben, Plan `specs/F-005/plan.md`.
 Lauf 1 (Backend) und Lauf 2 (Datenschicht, Einstellungen, Lexikon, Snippets)
-und Lauf 3 (Diktat + Verlauf) fertig, geprüft, committet. Jetzt: PM2-Betrieb und Live-Abnahme.
+und Lauf 3 (Diktat + Verlauf) fertig, geprüft, committet. Läuft live unter PM2;
+ausstehend: Live-Abnahme durch den Menschen (A4 der Specs), danach `verification.md`.
 
 ---
 
@@ -65,7 +66,9 @@ und Lauf 3 (Diktat + Verlauf) fertig, geprüft, committet. Jetzt: PM2-Betrieb un
   AssemblyAI), `max_tokens` je Aufgabe.
 - [ ] Etappe 4: PWA-Icons als PNG (192/512) erzeugen, Mobil-Feinschliff,
   `/impeccable init` für `PRODUCT.md`/`DESIGN.md`.
-- [ ] Phase C/D: PM2-Prozess `voitex-web` als `torsten`, `data/` im Backup prüfen.
+- [x] Phase C/D: PM2-Prozess `voitex-web` (torsten) im systemd-Dienst `pm2-torsten`
+  (cgroup geprüft), `pm2 save`; `data/` über Backup `SOURCES=(/)` abgedeckt.
+- Deploy nach Code-Änderung: `pnpm build && pm2 restart voitex-web`.
 - [ ] Backend muss das gebaute Frontend selbst ausliefern (nginx leitet alle
   Pfade an 3006 weiter, siehe `AGENTS.md` → Deployment); multer-Limit (100 MB)
   an nginx (200 MB) angleichen.
