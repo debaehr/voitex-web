@@ -1,6 +1,6 @@
 # SESSION STATE — voitex-web
 
-> **Letztes Update:** 261026_2000 · **von:** Claude Opus 5.5
+> **Letztes Update:** 261026_2030 · **von:** Claude Opus 5.5
 > **Branch:** main · **Node:** tool-01
 
 <!--
@@ -56,16 +56,19 @@ plus Datenanbindung von Verlauf, Lexikon, Snippets und Einstellungen.
 
 - [ ] Etappe 2: F-005 Diktat (Mikrofon, Pegel, `/api/transcribe` + `/api/process`,
   Zwischenablage, Verlauf), F-008–F-011 an Backend anbinden.
-- [ ] `apps/backend/.env` anlegen — Mensch entscheidet, ob die API-Schlüssel aus
-  V2T übernommen werden (Groq-Key ist ungültig).
+- [ ] `apps/backend/.env` anlegen — nur der OpenAI-Schlüssel wird aus V2T übernommen.
 - [ ] Etappe 3: F-007 Meeting-Upload asynchron (Job-ID + Polling statt synchron),
   F-006 Langzeitaufnahme (Chunks in IndexedDB, Wake Lock, Upload in Teilen,
   AssemblyAI), `max_tokens` je Aufgabe.
 - [ ] Etappe 4: PWA-Icons als PNG (192/512) erzeugen, Mobil-Feinschliff,
   `/impeccable init` für `PRODUCT.md`/`DESIGN.md`.
 - [ ] Phase C/D: PM2-Prozess `voitex-web` als `torsten`, `data/` im Backup prüfen.
-- [ ] Phase E: nginx-Block auf tool-01 (ich), Caddy auf edge-01 und Authentik
-  (Mensch). DNS `voitex.pmsuite.eu` ist gesetzt.
+- [ ] Backend muss das gebaute Frontend selbst ausliefern (nginx leitet alle
+  Pfade an 3006 weiter, siehe `AGENTS.md` → Deployment); multer-Limit (100 MB)
+  an nginx (200 MB) angleichen.
+- [x] Phase E: nginx `voitex-tailnet.conf`, Caddy, authentik, DNS eingerichtet
+  (Mensch, 26.10.2026); `https://voitex.pmsuite.eu` leitet auf authentik um.
+  Änderungen daran nur über den Menschen.
 
 ---
 

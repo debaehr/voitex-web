@@ -1,4 +1,23 @@
 
+## Deployment
+
+- The app listens on `127.0.0.1:3006` only. Never bind to `0.0.0.0` and do not
+  choose another port.
+- Public access only via `https://voitex.pmsuite.eu`: edge-01 (Caddy, TLS) →
+  authentik forward auth → tool-01 nginx `voitex-tailnet.conf` on
+  `100.109.76.36:8080` (allows edge-01 only) → app.
+- nginx forwards every path to the app, so the backend serves the built
+  frontend as well as `/api`.
+- The app must not implement its own login. The authenticated user arrives in
+  the `X-Authentik-Username` / `X-Authentik-Email` headers.
+- Upload limit at nginx: 200 MB. Proxy read timeout: 300 s.
+
+## Constraints / Nicht anfassen
+
+- nginx-, Caddy- und authentik-Konfiguration werden nicht von Agenten
+  geändert. Das geht über Torsten (Serververbund).
+- Keine Zugangsdaten, Token oder Schlüssel versionieren; `.env` bleibt lokal.
+
 ## Session-Handoff-Protokoll
 
 Dieses Projekt nutzt eine geteilte Datei `SESSION.md` als verbindlichen
