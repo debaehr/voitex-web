@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "pnpm --parallel --filter @voitex-web/* dev",
     "build": "pnpm -r build",
-    "check": "pnpm -r check"
+    "check": "pnpm -r check",
+    "test": "pnpm -r test"
   },
   "engines": {
     "node": ">=20"

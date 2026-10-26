@@ -18,6 +18,15 @@
   geändert. Das geht über Torsten (Serververbund).
 - Keine Zugangsdaten, Token oder Schlüssel versionieren; `.env` bleibt lokal.
 
+## Wichtige Befehle
+
+- `pnpm install`
+- `pnpm check` — type check
+- `pnpm test` — vitest
+- `pnpm build`
+- `pnpm --filter @voitex-web/backend dev`
+- `pnpm --filter @voitex-web/frontend dev` — port 5174, proxies `/api` to 3006
+
 ## Session-Handoff-Protokoll
 
 Dieses Projekt nutzt eine geteilte Datei `SESSION.md` als verbindlichen

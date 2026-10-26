@@ -1,3 +1,5 @@
+import { modeInstructions } from "../prompts.js";
+import { transcriptionLanguageFields } from "./shared.js";
 import {
   buildProcessInstructions,
   fileFormData,
@@ -12,22 +14,12 @@ const provider = "Mistral";
 const transcriptionModel = "voxtral-mini-latest";
 const chatModel = "mistral-large-latest";
 
-const modeInstructions = {
-  original:
-    "Bereinige das Transkript nur sprachlich. Erhalte Stil, Tonalität, Inhalt und Reihenfolge des Originals. Korrigiere Rechtschreibung, Zeichensetzung und klare Versprecher. Keine inhaltlichen Ergänzungen. Gib nur den finalen Text zurück.",
-  casual:
-    "Formuliere den Inhalt locker, natürlich und direkt. Nutze bei direkter Anrede die Du-Form. Kürze unnötige Wiederholungen und mache den Text gut lesbar. Gib nur den finalen Text zurück.",
-  formal:
-    "Formuliere den Inhalt höflich, professionell und klar. Nutze bei direkter Anrede die Sie-Form. Strukturiere den Text bei Bedarf in kurze, verständliche Abschnitte. Gib nur den finalen Text zurück.",
-  coding:
-    "Transformiere das Diktat in einen klaren, präzisen KI- oder Coding-Prompt. Extrahiere Ziel, Kontext, Anforderungen, Randbedingungen und gewünschtes Ausgabeformat. Nutze eine strukturierte Form mit Überschriften und Bulletpoints. Gib nur den finalen Prompt zurück."
-};
 
 export async function transcribeAudio(input: TranscribeInput): Promise<ProviderResult> {
   const apiKey = apiKeyOrThrow();
   const formData = fileFormData(input, {
     model: transcriptionModel,
-    language: input.language || "de"
+    ...transcriptionLanguageFields(input.language)
   });
 
   const result = await postMultipart<{ text: string }>("https://api.mistral.ai/v1/audio/transcriptions", apiKey, formData);

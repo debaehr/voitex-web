@@ -77,3 +77,8 @@ async function readResponse<T>(response: Response): Promise<T> {
   const text = await response.text();
   throw new Error(text || `Provider request failed with HTTP ${response.status}.`);
 }
+
+// Omitting the field lets the STT provider detect the language automatically.
+export function transcriptionLanguageFields(language?: string): Record<string, string> {
+  return language && language !== "auto" ? { language } : {};
+}

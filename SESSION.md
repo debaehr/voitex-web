@@ -1,6 +1,6 @@
 # SESSION STATE — voitex-web
 
-> **Letztes Update:** 261026_2050 · **von:** Claude Opus 5.5
+> **Letztes Update:** 261026_2120 · **von:** Claude Opus 5.5
 > **Branch:** main · **Node:** tool-01
 
 <!--
@@ -19,10 +19,9 @@
 ## 1 — Aktueller Task
 <!-- Was wird GERADE bearbeitet? 1–3 Sätze. Kein Roman. -->
 
-Etappe 2 (F-005 Diktat, F-008 Verlauf, F-009 Lexikon, F-010 Snippets,
-F-011 Einstellungen): Specs unter `specs/F-0xx/spec.md` als **Entwurf**, warten
-auf Freigabe des Menschen. Umsetzung danach per Happier-Delegation auf Codex
-(siehe `CLAUDE.md`); Claude schreibt keinen Produktionscode mehr.
+Etappe 2 (F-005, F-008–F-011), Specs freigegeben, Plan `specs/F-005/plan.md`.
+Lauf 1 (Testgerüst + Backend) fertig, geprüft und committet; Lauf 2
+(Frontend-Datenschicht, Einstellungen, Lexikon, Snippets) läuft per Happier/Codex.
 
 ---
 
@@ -43,7 +42,10 @@ auf Freigabe des Menschen. Umsetzung danach per Happier-Delegation auf Codex
 - **Seiten** `views/*`: Diktat, Protokoll, Meetings, Lexikon, Snippets, Verlauf,
   Einstellungen — Layout mit leeren Zuständen, noch **ohne** Datenanbindung;
   Overlay-Aufnahme ist nur simuliert (`App.tsx`).
-- **Build/Test-Status:** `pnpm check` und `pnpm build` grün; Screenshots
+- **Lauf 1:** `apps/backend/src/app.ts` (`createApp`, statisches Frontend + SPA-Fallback,
+  JSON-404 unter `/api`), `src/prompts.ts`, `/api/providers`, `/api/settings/defaults`,
+  Validierung Settings/History, `DELETE /api/history/:id`, 200 MB; 47 vitest-Tests.
+- **Build/Test-Status:** `pnpm check`, `pnpm test` und `pnpm build` grün; Screenshots
   Desktop/Mobil hell/dunkel per Headless-Chrome ohne Konsolenfehler.
 - **Screenshot-Werkzeug:** Playwright-MCP scheitert auf tool-01 an fehlenden
   Chrome-Bibliotheken; funktionierende Headless-Shell liegt unter
