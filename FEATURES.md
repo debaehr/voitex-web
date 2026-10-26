@@ -41,10 +41,10 @@
 
 ## Oberfläche
 
-- `F-001` App-Rahmen im Voitex-Layout (Sidebar, Kopfzeile, Zwei-Ebenen-Ansichten) — **offen**
-- `F-002` Hell/Dunkel/System-Farbschema — **offen**
+- `F-001` App-Rahmen im Voitex-Layout (Sidebar, Kopfzeile, Zwei-Ebenen-Ansichten) — **in-arbeit**
+- `F-002` Hell/Dunkel/System-Farbschema — **fertig**
 - `F-003` Overlay-Leiste wie in Voitex (Sprache, Aufnahme, Workflow, Status-Pille) — **offen**
-- `F-004` Mobile Ansicht für die PWA — **offen**
+- `F-004` Mobile Ansicht für die PWA — **in-arbeit**
 
 ## Aufnahme und Meetings
 

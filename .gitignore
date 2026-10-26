@@ -1,2 +1,6 @@
 features.json
 .env
+node_modules/
+dist/
+data/
+*.tsbuildinfo

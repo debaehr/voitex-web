@@ -1,6 +1,6 @@
 # SESSION STATE — voitex-web
 
-> **Letztes Update:** 261026_1910 · **von:** Claude Opus 5.5
+> **Letztes Update:** 261026_2000 · **von:** Claude Opus 5.5
 > **Branch:** main · **Node:** tool-01
 
 <!--
@@ -19,9 +19,9 @@
 ## 1 — Aktueller Task
 <!-- Was wird GERADE bearbeitet? 1–3 Sätze. Kein Roman. -->
 
-Projekt-Setup abgeschlossen (Skill `projekt-anlegen`). Nächster Schritt:
-Aufbau beginnen — Web-Version von Voitex im Voitex-Layout als Ersatz für V2T
-auf dem Firmenrechner, inkl. Sitzungsaufnahme bis 3 h mit Sprecherzuordnung.
+Aufbau in Etappen. Etappe 1 (Gerüst, Backend aus V2T, Design-System, App-Rahmen,
+alle Seiten als Layout) ist fertig. Nächste Etappe 2: F-005 Diktat end-to-end
+plus Datenanbindung von Verlauf, Lexikon, Snippets und Einstellungen.
 
 ---
 
@@ -29,15 +29,24 @@ auf dem Firmenrechner, inkl. Sitzungsaufnahme bis 3 h mit Sprecherzuordnung.
 <!-- Konkret. Datei:Zeile, Funktion, Testname. Damit der nächste Agent
      nicht suchen muss, wo der Faden liegt. -->
 
-- **Fertig:** Phase A (Verzeichnis, Git, `init_project.sh --check` ok),
-  Phase B (Deploy-Key, `origin` = `git@github-dk-voitex-web:debaehr/voitex-web.git`),
-  `FEATURES.md` F-001–F-011 vom Menschen bestätigt.
-- **Vorlagen:** Voitex-Desktop-Code `debaehr/voitex` (Electron, React 19,
-  Tailwind v4, shadcn-Stil, lucide-react) — nur lesend klonen, nicht kopieren
-  ohne Prüfung. V2T `/opt/v2t` (`PMSuite-eu/v2t`) als funktionale Basis
-  (Provider, AssemblyAI, Lexikon, Snippets). Analyse des Voitex-Layouts und
-  Screenshots stammen aus der V2T-Session vom 26.10.2026.
-- **Build/Test-Status:** noch kein Code.
+- **Struktur:** pnpm-Workspace. `apps/backend` = Kopie des V2T-Backends inkl.
+  Sync-Fix v1.2.1 (Port 3006, Daten in `data/`, ohne groq-sdk/mistral-SDK).
+  `apps/frontend` = React 18 + Vite, Dev-Server Port 5174 (Proxy `/api` → 3006).
+- **Design:** `apps/frontend/src/styles.css` — Voitex-Tokens (OKLCH, hell
+  Standard, `.dark`), App-Rahmen, Zwei-Ebenen-Band, Primitives, Overlay-Kapsel,
+  mobile Tab-Leiste (< 768 px, Liste → Detail).
+- **Komponenten:** `components/ui.tsx` (Button, Card, Badge, Field, Input,
+  Select, Textarea, Switch), `components/TwoLevel.tsx`, `components/OverlayBar.tsx`
+  (Sprache · Aufnahme-Punkt · Modus, Aufnahme-Kapsel, Status-Text),
+  `lib/nav.ts`, `lib/theme.ts` (System/Hell/Dunkel, pro Gerät in localStorage).
+- **Seiten** `views/*`: Diktat, Protokoll, Meetings, Lexikon, Snippets, Verlauf,
+  Einstellungen — Layout mit leeren Zuständen, noch **ohne** Datenanbindung;
+  Overlay-Aufnahme ist nur simuliert (`App.tsx`).
+- **Build/Test-Status:** `pnpm check` und `pnpm build` grün; Screenshots
+  Desktop/Mobil hell/dunkel per Headless-Chrome ohne Konsolenfehler.
+- **Screenshot-Werkzeug:** Playwright-MCP scheitert auf tool-01 an fehlenden
+  Chrome-Bibliotheken; funktionierende Headless-Shell liegt unter
+  `~/.cache/plane-review/chrome-headless-shell-linux64/`.
 
 ---
 
@@ -45,13 +54,18 @@ auf dem Firmenrechner, inkl. Sitzungsaufnahme bis 3 h mit Sprecherzuordnung.
 <!-- Geordnet nach Priorität. Erledigtes abhaken, nicht löschen,
      bis es nach DECISIONS_LOG.md archiviert wird. -->
 
-- [ ] Phase C: Stack aufsetzen (pnpm-Workspace `apps/frontend` + `apps/backend`
-  wie V2T), Backend auf `127.0.0.1:3006`, PM2 als `torsten`.
-- [ ] Offen: Tailwind ja/nein und `lucide-react` (neue Dependency) entscheiden.
-- [ ] `/impeccable init` für `PRODUCT.md`/`DESIGN.md` ausführen.
-- [ ] Phase D: prüfen, dass `/opt/voitex-web/data` vom Backup (`SOURCES=(/)`) erfasst ist.
-- [ ] Phase E (später, auf Wunsch des Menschen): `voitex.pmsuite.eu` — nginx,
-  Caddy auf edge-01, Authentik, DNS.
+- [ ] Etappe 2: F-005 Diktat (Mikrofon, Pegel, `/api/transcribe` + `/api/process`,
+  Zwischenablage, Verlauf), F-008–F-011 an Backend anbinden.
+- [ ] `apps/backend/.env` anlegen — Mensch entscheidet, ob die API-Schlüssel aus
+  V2T übernommen werden (Groq-Key ist ungültig).
+- [ ] Etappe 3: F-007 Meeting-Upload asynchron (Job-ID + Polling statt synchron),
+  F-006 Langzeitaufnahme (Chunks in IndexedDB, Wake Lock, Upload in Teilen,
+  AssemblyAI), `max_tokens` je Aufgabe.
+- [ ] Etappe 4: PWA-Icons als PNG (192/512) erzeugen, Mobil-Feinschliff,
+  `/impeccable init` für `PRODUCT.md`/`DESIGN.md`.
+- [ ] Phase C/D: PM2-Prozess `voitex-web` als `torsten`, `data/` im Backup prüfen.
+- [ ] Phase E: nginx-Block auf tool-01 (ich), Caddy auf edge-01 und Authentik
+  (Mensch). DNS `voitex.pmsuite.eu` ist gesetzt.
 
 ---
 
@@ -62,6 +76,8 @@ auf dem Firmenrechner, inkl. Sitzungsaufnahme bis 3 h mit Sprecherzuordnung.
 - 261026: Stack wie V2T (React + Vite PWA, Node/Express, PM2, nginx) — sonst wird der Umbau zu umfangreich.
 - 261026: Keine Daten aus V2T übernehmen; Betrieb als `torsten`, kein Service-Account.
 - 261026: V2T bleibt bis auf Fixes unverändert und läuft parallel weiter.
+- 261026: Kein Tailwind (Voitex-Klassen in plain CSS), `lucide-react` als einzige neue Runtime-Dependency.
+- 261026: Overlay-Leiste wie Voitex ist der Aufnahme-Einstieg für Diktate; Darstellung (Theme) pro Gerät, nicht serverseitig.
 
 ---
 
