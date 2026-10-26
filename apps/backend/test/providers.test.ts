@@ -22,3 +22,9 @@ for (const [name, provider] of Object.entries({ openai, mistral, groq })) {
     }
   });
 }
+
+it("passes prompt to the OpenAI SDK transcription request", async () => {
+  vi.stubEnv("OPENAI_API_KEY", "test-key");
+  await openai.transcribeAudio({ buffer: Buffer.from("audio"), filename: "test.webm", mimetype: "audio/webm", prompt: "Voitex" });
+  expect(create).toHaveBeenCalledWith(expect.objectContaining({ prompt: "Voitex" }));
+});

@@ -6,6 +6,7 @@ export type TranscribeInput = {
   filename: string;
   mimetype: string;
   language?: string;
+  prompt?: string;
   mode?: WorkMode;
 };
 

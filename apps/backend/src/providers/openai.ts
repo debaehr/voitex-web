@@ -9,6 +9,7 @@ export async function transcribeAudio(input: {
   filename: string;
   mimetype: string;
   language?: string;
+  prompt?: string;
 }) {
   assertApiKey();
   const client = createClient();
@@ -17,6 +18,7 @@ export async function transcribeAudio(input: {
   const transcription = await client.audio.transcriptions.create({
     file,
     model: "gpt-4o-mini-transcribe",
+    ...(input.prompt ? { prompt: input.prompt } : {}),
     ...transcriptionLanguageFields(input.language)
   });
 

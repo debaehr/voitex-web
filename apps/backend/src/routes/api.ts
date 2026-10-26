@@ -156,12 +156,19 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
       return;
     }
 
+    const prompt = typeof req.body?.prompt === "string" ? req.body.prompt.trim() : undefined;
+    if (req.body?.prompt !== undefined && (prompt === undefined || prompt.length > 1000)) {
+      sendError(res, 400, "Invalid prompt: expected at most 1000 characters.");
+      return;
+    }
+
     try {
       const result = await transcribeAudio(provider, {
         buffer: req.file.buffer,
         filename: req.file.originalname || "recording.webm",
         mimetype: req.file.mimetype || "audio/webm",
         language: req.body?.language,
+        ...(provider === "openai" && prompt ? { prompt } : {}),
         mode
       });
 

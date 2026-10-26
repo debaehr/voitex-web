@@ -1,4 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { api } from "./lib/api";
+import { HistoryProvider, useHistory } from "./lib/history-context";
+import { runDictation, type DictationMode, type DictationResult } from "./lib/dictation";
+import { modeLabels } from "./lib/history";
+import { readPreference, writePreference } from "./lib/device-preferences";
+import { useRecorder } from "./lib/useRecorder";
 import { MoreHorizontal } from "lucide-react";
 import { OverlayBar, type OverlayMessage } from "./components/OverlayBar";
 import { ConfirmDialog } from "./components/Dialog";
@@ -33,30 +39,78 @@ const twoLevelSections: Section[] = ["meetings", "history", "settings"];
 export function App() {
   return (
     <SettingsProvider>
-      <AppContent />
+      <HistoryProvider><AppContent /></HistoryProvider>
     </SettingsProvider>
   );
 }
 
 function AppContent() {
-  const { saving } = useSettings();
+  const { saving, settings, status: settingsStatus } = useSettings();
+  const history = useHistory();
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [pendingSection, setPendingSection] = useState<Section | null>(null);
   const [section, setSection] = useState<Section>("dictation");
   const [moreOpen, setMoreOpen] = useState(false);
   const [theme, setTheme] = useTheme();
-  const [mode, setMode] = useState("formal");
-  const [language, setLanguage] = useState("de");
-  const [recording, setRecording] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
+  const [mode, setMode] = useState(() => readPreference("voitex-mode", modes.map(item => item.id), "formal"));
+  const [language, setLanguage] = useState(() => readPreference("voitex-language", languages.map(item => item.id), "de"));
+  const [busyText, setBusyText] = useState<string | null>(null);
+  const [lastResult, setLastResult] = useState<DictationResult | null>(null);
   const [message, setMessage] = useState<OverlayMessage | null>(null);
   const messageTimer = useRef<number | null>(null);
+  const locked = useRef(false);
+  const processing = useRef(false);
+  const recordingOptions = useRef<{ mode: DictationMode; language: string; settings: NonNullable<typeof settings> } | null>(null);
+  const recorder = useRecorder(text => {
+    locked.current = false;
+    showMessage({ kind: "warning", text });
+  });
+  const { recording, elapsed, levels } = recorder;
+  useEffect(() => { writePreference("voitex-mode", mode); }, [mode]);
+  useEffect(() => { writePreference("voitex-language", language); }, [language]);
+  useEffect(() => () => {
+    if (messageTimer.current) window.clearTimeout(messageTimer.current);
+  }, []);
 
-  useEffect(() => {
-    if (!recording) return;
-    const timer = window.setInterval(() => setElapsed((value) => value + 1), 1000);
-    return () => window.clearInterval(timer);
-  }, [recording]);
+  async function startRecording() {
+    if (locked.current || recording || busyText) return;
+    if (settingsStatus !== "ready" || !settings) {
+      showMessage({ kind: "warning", text: "Einstellungen konnten nicht geladen werden. Bitte die Seite neu laden." });
+      return;
+    }
+    locked.current = true;
+    recordingOptions.current = { mode: mode as DictationMode, language, settings: structuredClone(settings) };
+    setMessage(null);
+    setBusyText("Mikrofon wird gestartet …");
+    try {
+      if (!(await recorder.start())) locked.current = false;
+    } catch (error) {
+      locked.current = false;
+      showMessage({ kind: "warning", text: error instanceof Error ? error.message : "Aufnahme fehlgeschlagen." });
+    } finally { setBusyText(null); }
+  }
+
+  async function stopRecording() {
+    if (!recording || busyText || processing.current || !recordingOptions.current) return;
+    processing.current = true;
+    setBusyText("Transkribiere …");
+    try {
+      const audio = await recorder.stop();
+      const result = await runDictation({ ...audio, ...recordingOptions.current, api, onStage: setBusyText });
+      setLastResult(result);
+      const copied = await copy(result.text, false);
+      await history.add({ ...result, id: crypto.randomUUID(), createdAt: new Date().toISOString() });
+      showMessage(copied
+        ? { kind: "success", text: "In die Zwischenablage kopiert." }
+        : { kind: "warning", text: "Kopieren nicht möglich — Text unten kopieren" });
+    } catch (error) {
+      showMessage({ kind: "warning", text: error instanceof Error ? error.message : "Diktat fehlgeschlagen." });
+    } finally {
+      processing.current = false;
+      locked.current = false;
+      setBusyText(null);
+    }
+  }
 
   function showMessage(next: OverlayMessage) {
     setMessage(next);
@@ -79,12 +133,14 @@ function AppContent() {
     setMoreOpen(false);
   }
 
-  async function copy(text: string) {
+  async function copy(text: string, notify = true) {
     try {
       await navigator.clipboard.writeText(text);
-      showMessage({ kind: "success", text: "In die Zwischenablage kopiert." });
+      if (notify) showMessage({ kind: "success", text: "In die Zwischenablage kopiert." });
+      return true;
     } catch {
-      showMessage({ kind: "warning", text: "Kopieren nicht möglich — bitte manuell markieren." });
+      if (notify) showMessage({ kind: "warning", text: "Kopieren nicht möglich — Text unten kopieren" });
+      return false;
     }
   }
 
@@ -138,7 +194,7 @@ function AppContent() {
 
         <div className="page-body" style={isTwoLevel ? { overflow: "hidden" } : undefined}>
           {section === "dictation" ? (
-            <DictationView modes={modes} activeMode={mode} onModeChange={setMode} lastResult={null} onCopy={copy} />
+            <DictationView modes={modes} activeMode={mode} onModeChange={setMode} lastResult={lastResult ? { text: lastResult.text, meta: `${modeLabels[lastResult.mode]} · ${lastResult.provider} · ${lastResult.durationSeconds.toFixed(1)} s` } : null} onCopy={copy} />
           ) : section === "protocol" ? (
             <ProtocolView onStart={() => showMessage({ kind: "info", text: "Langzeitaufnahme folgt in einer späteren Etappe." })} />
           ) : section === "meetings" ? (
@@ -148,7 +204,7 @@ function AppContent() {
           ) : section === "snippets" ? (
             <SnippetsView />
           ) : section === "history" ? (
-            <HistoryView entries={[]} onCopy={copy} />
+            <HistoryView />
           ) : (
             <SettingsView theme={theme} onThemeChange={setTheme} onDirtyChange={setSettingsDirty} />
           )}
@@ -164,17 +220,11 @@ function AppContent() {
             onModeChange={setMode}
             recording={recording}
             elapsedSeconds={elapsed}
-            levels={[]}
-            busyText={null}
+            levels={levels}
+            busyText={busyText}
             message={message}
-            onStart={() => {
-              setElapsed(0);
-              setRecording(true);
-            }}
-            onStop={() => {
-              setRecording(false);
-              showMessage({ kind: "warning", text: "Diktat-Anbindung folgt in Etappe 2." });
-            }}
+            onStart={() => { void startRecording(); }}
+            onStop={() => { void stopRecording(); }}
           />
         ) : null}
       </main>

@@ -1,6 +1,6 @@
 # SESSION STATE — voitex-web
 
-> **Letztes Update:** 261026_2135 · **von:** Claude Opus 5.5
+> **Letztes Update:** 261026_2150 · **von:** Claude Opus 5.5
 > **Branch:** main · **Node:** tool-01
 
 <!--
@@ -21,7 +21,7 @@
 
 Etappe 2 (F-005, F-008–F-011), Specs freigegeben, Plan `specs/F-005/plan.md`.
 Lauf 1 (Backend) und Lauf 2 (Datenschicht, Einstellungen, Lexikon, Snippets)
-fertig, geprüft, committet; Lauf 3 (Diktat + Verlauf) läuft per Happier/Codex.
+und Lauf 3 (Diktat + Verlauf) fertig, geprüft, committet. Jetzt: PM2-Betrieb und Live-Abnahme.
 
 ---
 

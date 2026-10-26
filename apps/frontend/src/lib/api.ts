@@ -1,3 +1,4 @@
+import type { ProcessingRequest, TranscriptionRequest } from "./dictation";
 import type { HistoryEntry, Providers, Settings } from "./types";
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
@@ -36,6 +37,18 @@ const json = (method: string, body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 });
 export const api = {
+  transcribe: (input: TranscriptionRequest) => {
+    const form = new FormData();
+    const extension = input.audio.type.includes("mp4") ? "mp4" : input.audio.type.includes("ogg") ? "ogg" : "webm";
+    form.append("audio", input.audio, `recording.${extension}`);
+    form.append("provider", input.provider);
+    form.append("mode", input.mode);
+    form.append("language", input.language);
+    if (input.prompt) form.append("prompt", input.prompt);
+    return request<{ transcript: string; provider: string }>("/transcribe", { method: "POST", body: form });
+  },
+  process: (input: ProcessingRequest) =>
+    request<{ processed: string; provider: string }>("/process", json("POST", input)),
   getProviders: () => request<Providers>("/providers"),
   getDefaults: () => request<Settings>("/settings/defaults"),
   getSettings: () => request<Partial<Settings>>("/settings"),
