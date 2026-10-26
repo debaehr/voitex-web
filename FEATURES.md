@@ -48,16 +48,16 @@
 
 ## Aufnahme und Meetings
 
-- `F-005` Diktat mit Modi und KI-Nachbearbeitung — **offen**
+- `F-005` Diktat mit Modi und KI-Nachbearbeitung — **in-arbeit**
 - `F-006` Langzeitaufnahme bis 3 h mit Sprecherzuordnung (AssemblyAI) und Protokoll — **offen**
 - `F-007` Meeting-Upload mit Sprecherzuordnung und Zusammenfassung — **offen**
 
 ## Arbeitsmittel und Daten
 
-- `F-008` Verlauf mit Suche, Kopieren und Einzellöschung — **offen**
-- `F-009` Lexikon — **offen**
-- `F-010` Snippets — **offen**
-- `F-011` Einstellungen (Anbieter, Prompts, Darstellung) — **offen**
+- `F-008` Verlauf mit Suche, Kopieren und Einzellöschung — **in-arbeit**
+- `F-009` Lexikon — **in-arbeit**
+- `F-010` Snippets — **in-arbeit**
+- `F-011` Einstellungen (Anbieter, Prompts, Darstellung) — **in-arbeit**
 
 ---
 

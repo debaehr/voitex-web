@@ -1,6 +1,6 @@
 # F-010 — Snippets
 
-Status: Entwurf · 26.10.2026 · Freigabe: ausstehend
+Status: freigegeben · 26.10.2026 · Freigabe: Mensch, 26.10.2026 (inkl. vitest als devDependency)
 
 ## Ziel
 
