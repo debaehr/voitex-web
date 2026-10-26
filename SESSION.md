@@ -1,6 +1,6 @@
 # SESSION STATE — voitex-web
 
-> **Letztes Update:** 261026_2030 · **von:** Claude Opus 5.5
+> **Letztes Update:** 261026_2050 · **von:** Claude Opus 5.5
 > **Branch:** main · **Node:** tool-01
 
 <!--
@@ -19,9 +19,10 @@
 ## 1 — Aktueller Task
 <!-- Was wird GERADE bearbeitet? 1–3 Sätze. Kein Roman. -->
 
-Aufbau in Etappen. Etappe 1 (Gerüst, Backend aus V2T, Design-System, App-Rahmen,
-alle Seiten als Layout) ist fertig. Nächste Etappe 2: F-005 Diktat end-to-end
-plus Datenanbindung von Verlauf, Lexikon, Snippets und Einstellungen.
+Etappe 2 (F-005 Diktat, F-008 Verlauf, F-009 Lexikon, F-010 Snippets,
+F-011 Einstellungen): Specs unter `specs/F-0xx/spec.md` als **Entwurf**, warten
+auf Freigabe des Menschen. Umsetzung danach per Happier-Delegation auf Codex
+(siehe `CLAUDE.md`); Claude schreibt keinen Produktionscode mehr.
 
 ---
 
