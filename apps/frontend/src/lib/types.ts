@@ -1,0 +1,42 @@
+export const settingModes = [
+  "original",
+  "casual",
+  "formal",
+  "coding",
+  "protocol",
+  "summary",
+] as const;
+export type SettingMode = (typeof settingModes)[number];
+export type Provider = "openai" | "mistral" | "groq";
+export interface LexiconEntry {
+  id: string;
+  spoken: string;
+  correct: string;
+}
+export interface Snippet {
+  id: string;
+  trigger: string;
+  text: string;
+}
+export interface Settings {
+  version: 1;
+  providers: Record<SettingMode, Provider>;
+  prompts: Record<SettingMode, string>;
+  lexicon: LexiconEntry[];
+  snippets: Snippet[];
+  ownSpeakerName: string;
+}
+export interface HistoryEntry {
+  id: string;
+  createdAt: string;
+  mode: "original" | "casual" | "formal" | "coding";
+  provider: string;
+  durationSeconds: number;
+  text: string;
+  raw: string;
+}
+export interface Providers {
+  stt: string[];
+  llm: string[];
+  meetings: boolean;
+}

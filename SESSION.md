@@ -1,6 +1,6 @@
 # SESSION STATE — voitex-web
 
-> **Letztes Update:** 261026_2120 · **von:** Claude Opus 5.5
+> **Letztes Update:** 261026_2135 · **von:** Claude Opus 5.5
 > **Branch:** main · **Node:** tool-01
 
 <!--
@@ -20,8 +20,8 @@
 <!-- Was wird GERADE bearbeitet? 1–3 Sätze. Kein Roman. -->
 
 Etappe 2 (F-005, F-008–F-011), Specs freigegeben, Plan `specs/F-005/plan.md`.
-Lauf 1 (Testgerüst + Backend) fertig, geprüft und committet; Lauf 2
-(Frontend-Datenschicht, Einstellungen, Lexikon, Snippets) läuft per Happier/Codex.
+Lauf 1 (Backend) und Lauf 2 (Datenschicht, Einstellungen, Lexikon, Snippets)
+fertig, geprüft, committet; Lauf 3 (Diktat + Verlauf) läuft per Happier/Codex.
 
 ---
 

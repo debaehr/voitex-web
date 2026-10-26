@@ -6,6 +6,7 @@ import { Button, Card, Input } from "../components/ui";
 // toolbar with search, sort, import/export and add, a hint line, then the list.
 
 interface ListPageProps {
+  disabled?: boolean;
   searchPlaceholder?: string;
   query: string;
   onQueryChange: (value: string) => void;
@@ -36,13 +37,13 @@ export function ListPage(props: ListPageProps) {
         <Button variant="outline" size="icon" aria-label="Reihenfolge umkehren" onClick={props.onToggleOrder}>
           <ArrowUp />
         </Button>
-        <Button variant="outline" onClick={props.onImport}>
+        <Button variant="outline" onClick={props.onImport} disabled={props.disabled}>
           <Upload /> Importieren
         </Button>
-        <Button variant="outline" onClick={props.onExport} disabled={!props.onExport}>
+        <Button variant="outline" onClick={props.onExport} disabled={props.disabled || !props.onExport}>
           <Download /> Exportieren
         </Button>
-        <Button onClick={props.onAdd}>
+        <Button onClick={props.onAdd} disabled={props.disabled}>
           <Plus /> Hinzufügen
         </Button>
       </div>

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { OverlayBar, type OverlayMessage } from "./components/OverlayBar";
+import { ConfirmDialog } from "./components/Dialog";
+import { SettingsProvider, useSettings } from "./lib/settings-context";
 import { cx } from "./components/ui";
 import { navAll, navBottom, navTop, tabSections, type NavEntry, type Section } from "./lib/nav";
 import { useTheme } from "./lib/theme";
@@ -29,6 +31,17 @@ const languages = [
 const twoLevelSections: Section[] = ["meetings", "history", "settings"];
 
 export function App() {
+  return (
+    <SettingsProvider>
+      <AppContent />
+    </SettingsProvider>
+  );
+}
+
+function AppContent() {
+  const { saving } = useSettings();
+  const [settingsDirty, setSettingsDirty] = useState(false);
+  const [pendingSection, setPendingSection] = useState<Section | null>(null);
   const [section, setSection] = useState<Section>("dictation");
   const [moreOpen, setMoreOpen] = useState(false);
   const [theme, setTheme] = useTheme();
@@ -52,6 +65,16 @@ export function App() {
   }
 
   function navigate(target: Section) {
+    if (target === section) {
+      setMoreOpen(false);
+      return;
+    }
+    // An in-flight save cannot be discarded; finish it before leaving settings.
+    if (section === "settings" && saving) return;
+    if (section === "settings" && settingsDirty) {
+      setPendingSection(target);
+      return;
+    }
     setSection(target);
     setMoreOpen(false);
   }
@@ -78,6 +101,20 @@ export function App() {
 
   return (
     <div className="app">
+      {pendingSection !== null ? (
+        <ConfirmDialog
+          title="Änderungen verwerfen?"
+          onClose={() => setPendingSection(null)}
+          onConfirm={() => {
+            setSection(pendingSection);
+            setPendingSection(null);
+            setSettingsDirty(false);
+            setMoreOpen(false);
+          }}
+        >
+          Die Einstellungen wurden noch nicht gespeichert. Beim Verlassen gehen diese Änderungen verloren.
+        </ConfirmDialog>
+      ) : null}
       <aside className="sidebar">
         <div className="sidebar-brand">voitex</div>
         <nav className="sidebar-nav top" aria-label="Hauptnavigation">
@@ -107,13 +144,13 @@ export function App() {
           ) : section === "meetings" ? (
             <MeetingsView />
           ) : section === "lexicon" ? (
-            <LexiconView entries={[]} />
+            <LexiconView />
           ) : section === "snippets" ? (
             <SnippetsView />
           ) : section === "history" ? (
             <HistoryView entries={[]} onCopy={copy} />
           ) : (
-            <SettingsView theme={theme} onThemeChange={setTheme} />
+            <SettingsView theme={theme} onThemeChange={setTheme} onDirtyChange={setSettingsDirty} />
           )}
         </div>
 
