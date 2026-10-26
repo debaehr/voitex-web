@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+#
+# pre-commit — erzwingt, dass SESSION.md bei Code-Aenderungen mitgepflegt wird.
+# Version 2 (01.08.2026)
+#
+# Logik:
+#   - Sind Code-/Inhaltsdateien gestaged, muss SESSION.md ebenfalls gestaged sein.
+#   - Reine Pflege-Commits (nur .md, .gitignore, Hooks, Lockfiles) sind frei.
+#   - Zusaetzlich: Warnung (ohne Block), wenn SESSION.md noch Platzhalter enthaelt.
+#
+# Hinweis: Der pre-commit-Hook hat KEINEN zuverlaessigen Zugriff auf die
+# Commit-Message (die existiert zu diesem Zeitpunkt noch nicht). Darum gibt es
+# hier KEINE [skip-session]-Logik. Notausgaenge:
+#   - Bewusste Ausnahme / reiner WIP-Commit:  git commit --no-verify
+#   - Experiment-Branches: in SKIP_BRANCHES eintragen.
+#
+# Installation: via init_session.sh (setzt core.hooksPath auf .githooks/).
+#
+# WICHTIG: Diese Datei muss ausfuehrbar sein — im Dateisystem UND im Git-Index.
+#   chmod +x .githooks/pre-commit
+#   git update-index --chmod=+x .githooks/pre-commit
+# Fehlt das x-Bit, laeuft der Hook still gar nicht.
+#
+set -euo pipefail
+
+SESSION_FILE="SESSION.md"
+SKIP_BRANCHES=("experiment" "scratch")
+
+current_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+for b in "${SKIP_BRANCHES[@]}"; do
+  [[ "$current_branch" == "$b" ]] && exit 0
+done
+
+staged="$(git diff --cached --name-only --diff-filter=ACM)"
+[[ -z "$staged" ]] && exit 0
+
+is_meta() {
+  case "$1" in
+    *.md|.gitignore|.gitattributes|.githooks/*|LICENSE|*.lock|*-lock.json|*.lockb)
+      return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+code_changed=false
+while IFS= read -r f; do
+  [[ -z "$f" ]] && continue
+  if ! is_meta "$f"; then
+    code_changed=true
+    break
+  fi
+done <<< "$staged"
+
+# Warnung bei unausgefuellter Vorlage - blockiert nicht, faellt aber auf.
+if [[ -f "$SESSION_FILE" ]] \
+   && grep -q "<YYMMDD_HHMM>\|<Noch nichts erfasst" "$SESSION_FILE" 2>/dev/null; then
+  echo "  Hinweis: SESSION.md enthaelt noch Platzhalter aus der Vorlage." >&2
+  echo "           Update-Zeile und §1 ausfuellen, sonst nuetzt sie dem" >&2
+  echo "           naechsten Agenten nichts." >&2
+  echo "" >&2
+fi
+
+$code_changed || exit 0
+
+if echo "$staged" | grep -qx "$SESSION_FILE"; then
+  exit 0
+fi
+
+cat >&2 <<'EOF'
+
+  +---------------------------------------------------------------+
+  |  COMMIT BLOCKIERT - SESSION.md nicht aktualisiert.            |
+  +---------------------------------------------------------------+
+  |  Du committest Code-Aenderungen, ohne den Arbeitsstand in     |
+  |  SESSION.md zu pflegen. Der naechste Agent / das naechste     |
+  |  Modell liest nur SESSION.md - pflege sie, sonst geht         |
+  |  Kontext verloren.                                            |
+  |                                                               |
+  |  Tu eines davon:                                              |
+  |    1. SESSION.md aktualisieren  ->  git add SESSION.md        |
+  |    2. Bewusster WIP/Notausgang  ->  git commit --no-verify    |
+  +---------------------------------------------------------------+
+
+EOF
+exit 1
