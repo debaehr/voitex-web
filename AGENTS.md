@@ -134,3 +134,45 @@ Projektkontext steht in `PRODUCT.md` und `DESIGN.md` (einmalig via `/impeccable 
 Vor groesseren Aufraeumrunden: Funde aller drei Quellen sammeln und mit
 `AUDIT_SORTIER_PROMPT.md` in Runden sortieren lassen. Read-only, keine Fixes
 im selben Lauf.
+
+## Arbeitsweise
+
+- **Spec-getrieben:** `FEATURES.md` (Mensch) → `specs/F-xxx/spec.md` (Freigabe Mensch) →
+  `plan.md` → testgetriebene Umsetzung → `verification.md` (Nachweis am Effekt).
+  Kleine Korrekturen ohne fachliche Wirkung brauchen keinen Spec, wohl aber einen Test.
+- **Code ist Englisch:** Bezeichner, Dateinamen, Kommentare, Commit-Messages, API- und
+  Datenbanknamen. Deutsch nur in Fachdokumenten, `SESSION.md`, `DECISIONS_LOG.md`, Specs
+  und in Oberflächentexten (über i18n, nie im Code hart verdrahtet).
+- **Prüfen vor jedem Commit von Code:** die Prüfbefehle aus „Wichtige Befehle“ (Tests,
+  Lint, Typprüfung). Solange dort keine stehen, ist das Anlegen der erste Auftrag.
+- Subagenten sind erwünscht, wo Arbeit parallelisierbar ist oder eine unabhängige Prüfung
+  hilft — Umsetzung über delegierte Läufe (siehe unten).
+
+## Delegierte Läufe
+
+Umsetzungsarbeit wird an einen anderen Agenten delegiert — ein Lead plant und prüft,
+ein Worker setzt um. Ablauf, Modellwahl und Rückfall: `~/.claude/DELEGATION.md` und
+`~/.claude/MODELLE.md`. Diese Regeln gelten für **beide Seiten** und jedes Werkzeug.
+
+### Für den Lead
+
+- **Ein delegierter Lauf startet kalt.** Das Briefing enthält: Ziel (1–2 Sätze),
+  erlaubte und verbotene Dateien, prüfbare Abnahmekriterien, Verbote (kein Schema-Eingriff
+  ohne Spec, keine neuen Abhängigkeiten ohne Freigabe, kein Commit), Rückmeldeform,
+  Verweis auf `specs/F-xxx/spec.md`.
+- **Was kritisch ist** (Modellwahl laut MODELLE.md), steht unter „Constraints / Nicht anfassen“.
+- **Nie zwei Läufe in dieselben Dateien.** Parallel nur mit je eigenem `git worktree`.
+- **Jedes Ergebnis wird geprüft, bevor es zählt:** Diff lesen, Prüfbefehle laufen lassen.
+  „Der Lauf sagt, es funktioniert“ ist kein Nachweis.
+- Der Lead führt `SESSION.md` und committet.
+
+### Für den delegierten Lauf
+
+- **Du committest nicht.** Der Lead prüft und committet.
+- **Du fasst keine Infrastruktur an:** kein systemd, kein Docker außerhalb dieses Projekts,
+  kein nginx, Caddy oder authentik, keine Backup-Konfiguration, kein Recreate der
+  Produktivcontainer.
+- **Du bleibst im Auftrag.** Funde melden, nicht nebenbei reparieren.
+- **Keine Rückfragen während des Laufs** (Happier stürzt dabei ab): offene Fragen gehören
+  ans Ende des Berichts.
+- **Du legst keine Features an** und änderst keine Titel in `FEATURES.md`.
