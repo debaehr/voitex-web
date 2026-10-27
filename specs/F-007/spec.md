@@ -1,6 +1,6 @@
 # F-007 — Transkript: Audiodatei hochladen mit Sprecherzuordnung und Zusammenfassung
 
-Status: Entwurf v2 · 27.10.2026 · Freigabe: ausstehend
+Status: freigegeben · 27.10.2026 · Freigabe: Mensch, 27.10.2026
 
 ## Ziel
 

@@ -1,6 +1,6 @@
 # F-006 — Meetings: Langzeitaufnahme bis 3 h mit Sprecherzuordnung und Protokoll
 
-Status: Entwurf v2 · 27.10.2026 · Freigabe: ausstehend
+Status: freigegeben · 27.10.2026 · Freigabe: Mensch, 27.10.2026 (F1: Audio automatisch löschen nach Download-Angebot; F2: Protokoll automatisch)
 
 ## Ziel
 
@@ -96,12 +96,12 @@ verlieren. Menüpunkt „Meetings“ (Section-ID `protocol`).
 Echtzeit-Transkript während der Aufnahme, Aufnahme bei gesperrtem iPhone (technisch
 nicht möglich), Sprecher-Wiedererkennung über Sitzungen, Übersetzung des Protokolls.
 
-## Offene Fragen
+## Entschiedene Fragen
 
-- F1 Audio nach erfolgreicher Verarbeitung automatisch löschen (Vorschlag; vorher
-  Download-Angebot) oder behalten bis zum manuellen Löschen?
-- F2 Protokoll automatisch nach der Transkription erzeugen (Vorschlag) oder erst auf
-  Knopfdruck?
+- F1 Audio wird nach erfolgreicher Verarbeitung automatisch gelöscht; vorher bietet die
+  Ergebnisansicht „Audio herunterladen“ an (Server-Kopie bis zur Löschung abrufbar,
+  `GET /api/meetings/:id/audio`, je Teil). Mensch, 27.10.2026.
+- F2 Protokoll wird automatisch nach der Transkription erzeugt. Mensch, 27.10.2026.
 
 ## Abnahme
 
