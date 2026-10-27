@@ -15,7 +15,7 @@ interface ModesViewProps {
 export function ModesView({ modes, activeMode, onModeChange }: ModesViewProps) {
   return (
     <div className="page-column stack">
-      <Card>
+      <Card className="modes-list">
         <CardHeader>
           <span className="section-label">Modi</span>
         </CardHeader>

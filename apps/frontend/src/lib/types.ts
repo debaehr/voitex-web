@@ -9,6 +9,14 @@ export const settingModes = [
 ] as const;
 export type SettingMode = (typeof settingModes)[number];
 export type Provider = "openai" | "mistral" | "groq";
+export type BuiltinMode = "original" | "casual" | "formal" | "coding";
+export interface CustomMode {
+  id: string;
+  label: string;
+  description?: string;
+  prompt: string;
+  provider: Provider;
+}
 export interface LexiconEntry {
   id: string;
   spoken: string;
@@ -26,11 +34,14 @@ export interface Settings {
   lexicon: LexiconEntry[];
   snippets: Snippet[];
   ownSpeakerName: string;
+  customModes?: CustomMode[];
+  hiddenModes?: BuiltinMode[];
 }
 export interface HistoryEntry {
   id: string;
   createdAt: string;
-  mode: "original" | "casual" | "formal" | "coding";
+  mode: string;
+  modeLabel?: string;
   provider: string;
   durationSeconds: number;
   text: string;

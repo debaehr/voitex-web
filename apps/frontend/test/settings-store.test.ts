@@ -16,6 +16,8 @@ const defaults: Settings = {
   lexicon: [],
   snippets: [],
   ownSpeakerName: "Ich",
+  customModes: [],
+  hiddenModes: [],
 };
 function client() {
   return {

@@ -93,7 +93,7 @@ describe("API and frontend", () => {
 
 describe("settings", () => {
   it("returns the complete default shape and persists atomically with backup", async () => {
-    const request = await start(); expect(await (await request("/api/settings/defaults")).json()).toEqual(settings());
+    const request = await start(); expect(await (await request("/api/settings/defaults")).json()).toEqual({ ...settings(), customModes: [], hiddenModes: [] });
     expect(Object.keys(defaultPrompts)).toEqual(modes);
     expect(Object.values(defaultPrompts).every(value => typeof value === "string" && value.length > 0)).toBe(true);
     expect((await request("/api/settings", "PUT", settings())).status).toBe(200);
@@ -108,6 +108,79 @@ describe("settings", () => {
   });
   it("accepts JSON bodies larger than the previous 1 MB limit", async () => {
     const request = await start(); expect((await request("/api/settings", "PUT", { ...settings(), ownSpeakerName: "x".repeat(1100000) })).status).toBe(200);
+  });
+});
+
+describe("custom dictation modes", () => {
+  const custom = { id: "custom-12345678-1234-1234-1234-123456789abc", label: "Kundenmail", description: "Antwort an Kunden", prompt: "Schreibe eine E-Mail.", provider: "openai" };
+  it("loads and round-trips the exact pre-F-013 settings shape unchanged", async () => {
+    const legacy = settings();
+    const serialized = JSON.stringify(legacy, null, 2);
+    await mkdir(join(dir, "data"));
+    await writeFile(join(dir, "data/settings.json"), serialized);
+    const request = await start();
+    const loaded = await (await request("/api/settings")).json();
+    expect(loaded).toEqual(legacy);
+    expect(await readFile(join(dir, "data/settings.json"), "utf8")).toBe(serialized);
+    expect((await request("/api/settings", "PUT", loaded)).status).toBe(200);
+    expect(await (await request("/api/settings")).json()).toEqual(legacy);
+    expect(JSON.parse(await readFile(join(dir, "data/settings.json"), "utf8"))).toEqual(legacy);
+  });
+  it.each([
+    { customModes: [], hiddenModes: [] },
+    { customModes: [custom] },
+    { customModes: [{ ...custom, description: undefined }] },
+    { hiddenModes: ["original", "coding"] },
+    { hiddenModes: ["original", "casual", "formal", "coding"], customModes: [custom] },
+    { customModes: [{ ...custom, label: "x".repeat(40), description: "x".repeat(120), prompt: "x".repeat(8000) }] },
+    { customModes: Array.from({ length: 20 }, (_, i) => ({ ...custom, id: `custom-12345678-1234-1234-1234-${String(i).padStart(12, "0")}`, label: `Mode ${i}` })) },
+  ])("persists valid additive fields %#", async fields => {
+    const request = await start();
+    const next = JSON.parse(JSON.stringify({ ...settings(), ...fields }));
+    expect((await request("/api/settings", "PUT", next)).status).toBe(200);
+    expect(await (await request("/api/settings")).json()).toEqual(next);
+  });
+  it.each([
+    { customModes: null }, { customModes: {} }, { customModes: [null] },
+    ...["", "   ", "x".repeat(41), 1].map(label => ({ customModes: [{ ...custom, label }] })),
+    ...["", "   ", "x".repeat(8001), 1].map(prompt => ({ customModes: [{ ...custom, prompt }] })),
+    ...["x".repeat(121), null, 1].map(description => ({ customModes: [{ ...custom, description }] })),
+    ...["formal", "custom-invalid", 1].map(id => ({ customModes: [{ ...custom, id }] })),
+    { customModes: [{ ...custom, provider: "invalid" }] },
+    { customModes: [custom, { ...custom, label: "Other" }] },
+    { customModes: [custom, { ...custom, id: "custom-87654321-1234-1234-1234-123456789abc", label: " KUNDENMAIL " }] },
+    { customModes: Array.from({ length: 21 }, (_, i) => ({ ...custom, id: `custom-12345678-1234-1234-1234-${String(i).padStart(12, "0")}`, label: `Mode ${i}` })) },
+    { hiddenModes: null }, { hiddenModes: "formal" }, { hiddenModes: ["protocol"] },
+    { hiddenModes: [custom.id] }, { hiddenModes: ["formal", "formal"] },
+    { hiddenModes: ["original", "casual", "formal", "coding"] },
+  ])("rejects invalid mode settings as JSON without overwriting existing settings %#", async fields => {
+    const request = await start();
+    await request("/api/settings", "PUT", settings());
+    const response = await request("/api/settings", "PUT", { ...settings(), ...fields });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toHaveProperty("error");
+    expect(await (await request("/api/settings")).json()).toEqual(settings());
+  });
+  it("preserves legacy history and accepts custom ids with recorded labels", async () => {
+    const old = { id: "old", createdAt: "2026-10-27", mode: "formal", provider: "OpenAI", durationSeconds: 2, text: "Old", raw: "Raw" };
+    const serialized = JSON.stringify([old], null, 2);
+    await mkdir(join(dir, "data"));
+    await writeFile(join(dir, "data/history.json"), serialized);
+    const request = await start();
+    expect(await (await request("/api/history")).json()).toEqual([old]);
+    expect(await readFile(join(dir, "data/history.json"), "utf8")).toBe(serialized);
+    const entry = { ...old, id: "new", mode: custom.id, modeLabel: "x".repeat(80), targetLanguage: "hr" };
+    expect((await request("/api/history", "POST", entry)).status).toBe(200);
+    expect(await (await request("/api/history")).json()).toEqual([old, entry]);
+  });
+  it.each([null, 42, "x".repeat(81)])("rejects invalid history modeLabel %j on POST and legacy PUT", async modeLabel => {
+    const request = await start();
+    const entry = { id: "new", text: "Text", mode: custom.id, modeLabel };
+    for (const method of ["POST", "PUT"]) {
+      const response = await request("/api/history", method, method === "PUT" ? [entry] : entry);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toHaveProperty("error");
+    }
   });
 });
 

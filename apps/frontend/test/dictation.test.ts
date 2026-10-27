@@ -25,7 +25,7 @@ describe("dictation", () => {
   it("uses processed original text, recording metadata, prompt and stages", async () => {
     const api = fake(), onStage = vi.fn();
     const result = await runDictation({ audio: new Blob(), durationSeconds: 2, mode: "original", language: "auto", settings, api, onStage });
-    expect(result).toEqual({ text: "Final", raw: "raw", provider: "OpenAI", mode: "original", durationSeconds: 2 });
+    expect(result).toEqual({ text: "Final", raw: "raw", provider: "OpenAI", mode: "original", modeLabel: "Original", durationSeconds: 2 });
     expect(api.transcribe).toHaveBeenCalledWith(expect.objectContaining({ prompt: "Voitex", language: "auto", provider: "openai" }));
     expect(api.process).toHaveBeenCalledWith(expect.objectContaining({ instructions: "Clean", mode: "original" }));
     expect(onStage.mock.calls.flat()).toEqual(["Transkribiere …", "Bearbeite …"]);

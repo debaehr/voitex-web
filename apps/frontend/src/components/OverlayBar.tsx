@@ -83,7 +83,7 @@ export function OverlayBar(props: OverlayBarProps) {
                 setMenu(null);
               }}
             >
-              {option.label}
+              <span className="overlay-option-label">{option.label}</span>
               {option.id === menuValue ? <Check className="check" size={16} /> : null}
             </button>
           ))}
@@ -118,9 +118,10 @@ export function OverlayBar(props: OverlayBarProps) {
             aria-label="Modus wählen"
             aria-expanded={menu === "mode"}
             aria-haspopup="menu"
+            title={activeMode?.label}
             onClick={() => setMenu(menu === "mode" ? null : "mode")}
           >
-            {activeMode?.label}<ChevronDown aria-hidden />
+            <span className="overlay-mode-label">{activeMode?.label}</span><ChevronDown aria-hidden />
           </button>
           <div className="overlay-row">
             <button

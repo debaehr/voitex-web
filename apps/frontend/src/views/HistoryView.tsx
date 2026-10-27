@@ -6,7 +6,7 @@ import { Button, Card, CardContent, Field, Input } from "../components/ui";
 import { useHistory } from "../lib/history-context";
 import { useSettings } from "../lib/settings-context";
 import { findDuplicateSpoken } from "../lib/lexicon";
-import { exportHistory, filterHistory, modeLabels, resultMeta, sortHistory } from "../lib/history";
+import { exportHistory, filterHistory, historyModeLabel, resultMeta, sortHistory } from "../lib/history";
 import { readPreference, writePreference } from "../lib/device-preferences";
 
 export function HistoryView() {
@@ -73,7 +73,7 @@ export function HistoryView() {
     </ConfirmDialog> : null}
     <TwoLevel
       entries={ordered.map(entry => ({
-        id: entry.id, title: modeLabels[entry.mode], subtitle: entry.text,
+        id: entry.id, title: historyModeLabel(entry), subtitle: entry.text,
         badge: <span className="mono text-xs muted">{new Date(entry.createdAt).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>,
         onDelete: history.busy ? undefined : () => setConfirm({ id: entry.id }),
       }))}

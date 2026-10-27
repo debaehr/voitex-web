@@ -90,7 +90,9 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
       prompts: defaultPrompts,
       lexicon: [],
       snippets: [],
-      ownSpeakerName: "Ich"
+      ownSpeakerName: "Ich",
+      customModes: [],
+      hiddenModes: []
     });
   });
 
@@ -336,7 +338,8 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
 
   async function handlePutHistory(req: Request, res: Response) {
     if (!Array.isArray(req.body) || !req.body.every(entry =>
-      !isRecord(entry) || entry.targetLanguage === undefined || isTargetLanguage(entry.targetLanguage))) {
+      !isRecord(entry) || ((entry.targetLanguage === undefined || isTargetLanguage(entry.targetLanguage)) &&
+        isValidModeLabel(entry.modeLabel)))) {
       sendError(res, 400, "Invalid body: expected array.");
       return;
     }
@@ -425,12 +428,44 @@ function isValidSettings(value: unknown): boolean {
     Object.values(providers).every(isProvider) &&
     modes.every(mode => typeof prompts[mode] === "string") &&
     Object.values(prompts).every(prompt => typeof prompt === "string") &&
-    Array.isArray(value.lexicon) && Array.isArray(value.snippets) && typeof value.ownSpeakerName === "string";
+    Array.isArray(value.lexicon) && Array.isArray(value.snippets) && typeof value.ownSpeakerName === "string" &&
+    isValidModeSettings(value);
+}
+
+function isValidModeSettings(value: Record<string, unknown>): boolean {
+  // Optional additive fields: old version-1 files remain valid without rewriting.
+  const customModes = value.customModes ?? [];
+  const hiddenModes = value.hiddenModes ?? [];
+  if (value.customModes === null || value.hiddenModes === null ||
+      !Array.isArray(customModes) || customModes.length > 20 || !Array.isArray(hiddenModes)) return false;
+  const ids = new Set<string>();
+  const names = new Set<string>();
+  for (const mode of customModes) {
+    if (!isRecord(mode) || typeof mode.id !== "string" ||
+        !/^custom-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(mode.id) ||
+        typeof mode.label !== "string" || !mode.label.trim() || mode.label.length > 40 ||
+        (mode.description !== undefined && (typeof mode.description !== "string" || mode.description.length > 120)) ||
+        typeof mode.prompt !== "string" || !mode.prompt.trim() || mode.prompt.length > 8000 ||
+        !isProvider(mode.provider)) return false;
+    const id = mode.id.toLowerCase();
+    const name = mode.label.trim().toLowerCase();
+    if (ids.has(id) || names.has(name)) return false;
+    ids.add(id);
+    names.add(name);
+  }
+  return hiddenModes.every(mode => typeof mode === "string" && isWorkMode(mode)) &&
+    new Set(hiddenModes).size === hiddenModes.length &&
+    validWorkModes.length - hiddenModes.length + customModes.length >= 1;
+}
+
+function isValidModeLabel(value: unknown): boolean {
+  return value === undefined || (typeof value === "string" && value.length <= 80);
 }
 
 function isValidHistoryEntry(value: unknown): value is Record<string, unknown> & { id: string; text: string } {
   return isRecord(value) && typeof value.id === "string" && value.id.trim().length > 0 &&
     (value.targetLanguage === undefined || isTargetLanguage(value.targetLanguage)) &&
+    isValidModeLabel(value.modeLabel) &&
     typeof value.text === "string" && value.text.trim().length > 0 &&
     ["mode", "provider", "createdAt", "raw"].every(key => value[key] === undefined || typeof value[key] === "string") &&
     (value.durationSeconds === undefined || (typeof value.durationSeconds === "number" && Number.isFinite(value.durationSeconds)));

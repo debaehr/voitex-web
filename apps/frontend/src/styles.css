@@ -1217,3 +1217,23 @@ textarea {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
+
+/* F-013: mode names remain usable on narrow screens and in editing cards. */
+.overlay-mode-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.overlay-controls .overlay-mode { width: max-content; max-width: min(220px, calc(100vw - 32px)); }
+.overlay-mode svg, .overlay-menu-item .check { flex-shrink: 0; }
+.overlay-option-label { min-width: 0; overflow-wrap: anywhere; }
+.mode-card .card-header.row { flex-wrap: wrap; gap: 12px; }
+.mode-card .card-title { overflow-wrap: anywhere; }
+.mode-card .form-error, .mode-card .field-hint { margin: 0; font-size: 12px; }
+.mode-card [aria-invalid="true"] { border-color: var(--destructive); }
+.restore-modes { max-width: 100%; height: auto; min-height: 36px; padding-block: 8px; white-space: normal; text-align: left; }
+.modes-list .card-title, .modes-list .card-description, .form-fields .field-label { overflow-wrap: anywhere; }
+.modes-list .badge { flex-shrink: 0; }
+.dialog-head .card-title { min-width: 0; overflow-wrap: anywhere; }
+.dialog-head > .btn { flex-shrink: 0; }

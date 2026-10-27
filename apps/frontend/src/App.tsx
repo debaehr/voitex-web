@@ -1,8 +1,9 @@
 import { targetLanguages, type TargetLanguage } from "./lib/target-languages";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./lib/api";
 import { HistoryProvider, useHistory } from "./lib/history-context";
-import { runDictation, type DictationMode, type DictationResult } from "./lib/dictation";
+import { runDictation, snapshotDictationOptions, type DictationOptions, type DictationResult } from "./lib/dictation";
+import { availableDictationModes, resolveMode } from "./lib/modes";
 import { resultMeta } from "./lib/history";
 import { readPreference, writePreference } from "./lib/device-preferences";
 import { useRecorder } from "./lib/useRecorder";
@@ -16,18 +17,11 @@ import { useTheme } from "./lib/theme";
 import { DictationView } from "./views/DictationView";
 import { HistoryView } from "./views/HistoryView";
 import { LexiconView } from "./views/LexiconView";
-import { ModesView, type ModeInfo } from "./views/ModesView";
+import { ModesView } from "./views/ModesView";
 import { MeetingsView } from "./views/MeetingsView";
 import { ProtocolView } from "./views/ProtocolView";
 import { SettingsView } from "./views/SettingsView";
 import { SnippetsView } from "./views/SnippetsView";
-
-const modes: ModeInfo[] = [
-  { id: "original", label: "Original", description: "Sprache in Text umwandeln, sprachlich bereinigt." },
-  { id: "casual", label: "Casual", description: "Locker formuliert, z. B. für Chat-Nachrichten." },
-  { id: "formal", label: "Formal", description: "Sachlich und vollständig, z. B. für E-Mails." },
-  { id: "coding", label: "Coding", description: "Präzise Anweisung für Coding-Agenten." }
-];
 
 export const languages = [
   { id: "auto", label: "Automatisch erkennen", short: "Auto" },
@@ -55,7 +49,10 @@ function AppContent() {
   const [section, setSection] = useState<Section>("dictation");
   const [moreOpen, setMoreOpen] = useState(false);
   const [theme, setTheme] = useTheme();
-  const [mode, setMode] = useState(() => readPreference("voitex-mode", modes.map(item => item.id), "formal"));
+  const modes = useMemo(() => availableDictationModes(settings), [settings]);
+  // Wait for server settings before validating a saved custom id.
+  const [mode, setMode] = useState("");
+  const activeMode = resolveMode(mode, modes);
   const [language, setLanguage] = useState(() => readPreference("voitex-language", languages.map(item => item.id), "de"));
   const [targetLanguage, setTargetLanguage] = useState(() => readPreference("voitex-target-language", targetLanguages.map(item => item.id), "source") as TargetLanguage);
   const [busyText, setBusyText] = useState<string | null>(null);
@@ -64,13 +61,19 @@ function AppContent() {
   const messageTimer = useRef<number | null>(null);
   const locked = useRef(false);
   const processing = useRef(false);
-  const recordingOptions = useRef<{ mode: DictationMode; language: string; targetLanguage: TargetLanguage; settings: NonNullable<typeof settings> } | null>(null);
+  const recordingOptions = useRef<DictationOptions | null>(null);
   const recorder = useRecorder(text => {
     locked.current = false;
     showMessage({ kind: "warning", text });
   });
   const { recording, elapsed, levels } = recorder;
-  useEffect(() => { writePreference("voitex-mode", mode); }, [mode]);
+  useEffect(() => {
+    if (settingsStatus !== "ready") return;
+    const next = mode ? resolveMode(mode, modes) :
+      readPreference("voitex-mode", modes.map(item => item.id), resolveMode("formal", modes));
+    if (next !== mode) setMode(next);
+    writePreference("voitex-mode", next);
+  }, [mode, modes, settingsStatus]);
   useEffect(() => { writePreference("voitex-language", language); }, [language]);
   useEffect(() => { writePreference("voitex-target-language", targetLanguage); }, [targetLanguage]);
   useEffect(() => () => {
@@ -84,7 +87,7 @@ function AppContent() {
       return;
     }
     locked.current = true;
-    recordingOptions.current = { mode: mode as DictationMode, language, targetLanguage, settings: structuredClone(settings) };
+    recordingOptions.current = snapshotDictationOptions({ mode: activeMode, language, targetLanguage, settings });
     setMessage(null);
     setBusyText("Mikrofon wird gestartet …");
     try {
@@ -209,7 +212,7 @@ function AppContent() {
           ) : section === "snippets" ? (
             <SnippetsView />
           ) : section === "modes" ? (
-            <ModesView modes={modes} activeMode={mode} onModeChange={setMode} />
+            <ModesView modes={modes} activeMode={activeMode} onModeChange={setMode} />
           ) : section === "history" ? (
             <HistoryView />
           ) : (
@@ -225,7 +228,7 @@ function AppContent() {
             targetLanguage={targetLanguage}
             onTargetLanguageChange={setTargetLanguage}
             modes={modes}
-            mode={mode}
+            mode={activeMode}
             onModeChange={setMode}
             recording={recording}
             elapsedSeconds={elapsed}

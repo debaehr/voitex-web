@@ -63,6 +63,8 @@ ausstehend: Live-Abnahme durch den Menschen (A4 der Specs), danach `verification
   `protocol`/`meetings` unverändert); „Aufnahme starten“ deaktiviert mit Hinweis; Hinweisbox
   im Diktat entfernt; Modi als eigener Menüpunkt `modes` (Handy: unter „Mehr“);
   Aufnahmesprache + Kroatisch, Standard DE (Entscheidung Mensch).
+- [ ] F-013 eigene Modi umgesetzt (27.10., Codex xhigh), live; Live-Abnahme A4 offen.
+  Datensicherung vor Deploy: `~/backup/voitex-web-data-<zeitstempel>/`.
 - [ ] Weitere Wünsche (27.10.):
   - Neu gewünscht: Übersetzer (V2T hatte nur „nach Englisch“). Overlay mit 3 Schaltern:
     links Aufnahmesprache, rechts **Zielsprache** (mind. DE, EN, HR); Modus-Schalter wandert

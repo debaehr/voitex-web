@@ -33,6 +33,8 @@ const defaults: Settings = {
   lexicon: [],
   snippets: [],
   ownSpeakerName: "Ich",
+  customModes: [],
+  hiddenModes: [],
 };
 const entries = [
   { id: "1", spoken: "müller", correct: "Müller" },

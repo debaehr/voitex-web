@@ -7,7 +7,11 @@ export function mergeWithDefaults(
   defaults: Settings,
 ): Settings {
   const result = structuredClone(defaults);
+  result.customModes = [];
+  result.hiddenModes = [];
   if (!isRecord(partial)) return result;
+  if (Array.isArray(partial.customModes)) result.customModes = structuredClone(partial.customModes);
+  if (Array.isArray(partial.hiddenModes)) result.hiddenModes = [...partial.hiddenModes];
   for (const mode of settingModes) {
     const provider = isRecord(partial.providers)
       ? partial.providers[mode]
