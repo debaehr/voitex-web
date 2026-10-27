@@ -1,6 +1,6 @@
 # SESSION STATE — voitex-web
 
-> **Letztes Update:** 261026_2205 · **von:** Claude Opus 5.5
+> **Letztes Update:** 271026_0835 · **von:** Claude Opus 5.5
 > **Branch:** main · **Node:** tool-01
 
 <!--
@@ -19,10 +19,9 @@
 ## 1 — Aktueller Task
 <!-- Was wird GERADE bearbeitet? 1–3 Sätze. Kein Roman. -->
 
-Etappe 2 (F-005, F-008–F-011), Specs freigegeben, Plan `specs/F-005/plan.md`.
-Lauf 1 (Backend) und Lauf 2 (Datenschicht, Einstellungen, Lexikon, Snippets)
-und Lauf 3 (Diktat + Verlauf) fertig, geprüft, committet. Läuft live unter PM2;
-ausstehend: Live-Abnahme durch den Menschen (A4 der Specs), danach `verification.md`.
+Etappe 3: F-006 Meetings-Aufnahme, F-007 Transkript-Upload. Plan `specs/F-006/plan.md`.
+Lauf 1 (Backend) und 1b (Live-Probe Mistral/AssemblyAI) fertig; nächster Schritt
+Lauf 2 (Frontend Aufnahme, Codex, xhigh).
 
 ---
 
@@ -65,9 +64,11 @@ ausstehend: Live-Abnahme durch den Menschen (A4 der Specs), danach `verification
   Aufnahmesprache + Kroatisch, Standard DE (Entscheidung Mensch).
 - [x] F-013 eigene Modi umgesetzt und abgenommen (27.10.).
   Datensicherung vor Deploy: `~/backup/voitex-web-data-<zeitstempel>/`.
-- [ ] Etappe 3 Lauf 1 (Backend Meetings) + Fallback-Diagnose committet und deployt;
-  nächster Schritt Live-Probe 1b mit echten Schlüsseln (Mensch liefert).
-  Befund für Lauf 3: `mergeWithDefaults` übernimmt `providers.meetings` noch nicht.
+- [x] Etappe 3 Lauf 1 (Backend Meetings) + Fallback-Diagnose committet und deployt.
+- [x] Lauf 1b Live-Probe bestanden (27.10.), Ergebnis und Befunde für Lauf 3 in `specs/F-006/plan.md`.
+  Schlüssel MISTRAL/ASSEMBLYAI in `apps/backend/.env` (Mensch, 27.10.). Testsitzung
+  „Probe 1b Mistral“ liegt in `data/meetings/`.
+- [ ] Lauf 2 Frontend Aufnahme, Lauf 3 Ergebnis + Upload, Lauf 4 Abnahme.
 - [ ] Weitere Wünsche (27.10.):
   - Neu gewünscht: Übersetzer (V2T hatte nur „nach Englisch“). Overlay mit 3 Schaltern:
     links Aufnahmesprache, rechts **Zielsprache** (mind. DE, EN, HR); Modus-Schalter wandert
@@ -121,7 +122,7 @@ ausstehend: Live-Abnahme durch den Menschen (A4 der Specs), danach `verification
 <!-- Echte Blocker, die ein Agent nicht selbst entscheiden darf.
      Leer lassen, wenn keine. -->
 
-- Schlüssel MISTRAL_API_KEY und ASSEMBLYAI_API_KEY für `apps/backend/.env` (Mensch liefert).
+- (keine)
 
 ---
 
