@@ -38,11 +38,13 @@ describe("API and frontend", () => {
   it("reports configured providers without disclosing keys", async () => {
     const request = await start();
     for (const key of ["OPENAI_API_KEY", "MISTRAL_API_KEY", "GROQ_API_KEY", "ASSEMBLYAI_API_KEY"]) vi.stubEnv(key, "");
-    expect(await (await request("/api/providers")).json()).toEqual({ stt: [], llm: [], meetings: false });
+    expect(await (await request("/api/providers")).json()).toEqual({ stt: [], llm: [], meetings: [] });
     vi.stubEnv("OPENAI_API_KEY", "secret-openai"); vi.stubEnv("GROQ_API_KEY", "secret-groq"); vi.stubEnv("ASSEMBLYAI_API_KEY", "secret-meeting");
-    expect(await (await request("/api/providers")).json()).toEqual({ stt: ["openai", "groq"], llm: ["openai", "groq"], meetings: true });
+    expect(await (await request("/api/providers")).json()).toEqual({ stt: ["openai", "groq"], llm: ["openai", "groq"], meetings: ["assemblyai"] });
     vi.stubEnv("MISTRAL_API_KEY", "secret-mistral");
-    expect((await (await request("/api/providers")).json()).stt).toEqual(["openai", "mistral", "groq"]);
+    const available = await (await request("/api/providers")).json();
+    expect(available.stt).toEqual(["openai", "mistral", "groq"]);
+    expect(available.meetings).toEqual(["mistral", "assemblyai"]);
   });
   it("serves SPA, static files and cache policies while keeping API JSON", async () => {
     await mkdir(join(dir, "frontend/assets"), { recursive: true });
@@ -80,7 +82,7 @@ describe("API and frontend", () => {
     const request = await start(); expect((await request("/some/path")).status).toBe(503);
     expect((await request("/api/health")).status).toBe(200);
   });
-  it.each(["/api/transcribe", "/api/transcribe-meeting"])("rejects oversized audio as JSON at %s", async path => {
+  it.each(["/api/transcribe"])("rejects oversized audio as JSON at %s", async path => {
     expect(DEFAULT_UPLOAD_LIMIT_BYTES).toBe(200 * 1024 * 1024);
     const server = createApp({ dataDir: dir, frontendDir: dir, uploadLimitBytes: 32 }).listen(0, "127.0.0.1"); servers.push(server);
     await new Promise<void>(resolve => server.once("listening", resolve));
@@ -93,7 +95,7 @@ describe("API and frontend", () => {
 
 describe("settings", () => {
   it("returns the complete default shape and persists atomically with backup", async () => {
-    const request = await start(); expect(await (await request("/api/settings/defaults")).json()).toEqual({ ...settings(), customModes: [], hiddenModes: [] });
+    const request = await start(); expect(await (await request("/api/settings/defaults")).json()).toEqual({ ...settings(), providers: { ...settings().providers, meetings: "mistral" }, customModes: [], hiddenModes: [] });
     expect(Object.keys(defaultPrompts)).toEqual(modes);
     expect(Object.values(defaultPrompts).every(value => typeof value === "string" && value.length > 0)).toBe(true);
     expect((await request("/api/settings", "PUT", settings())).status).toBe(200);

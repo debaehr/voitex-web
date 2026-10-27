@@ -3,6 +3,8 @@ import express from "express";
 import { existsSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { MeetingService } from "./meetings.js";
+import { createMeetingChunkRouter, createMeetingRouter } from "./routes/meetings.js";
 import { createApiRouter } from "./routes/api.js";
 
 export type AppOptions = {
@@ -10,6 +12,8 @@ export type AppOptions = {
   frontendDir?: string;
   // Test seam to exercise multer's actual limit handling without allocating 200 MB.
   uploadLimitBytes?: number;
+  resumeMeetingJobs?: boolean;
+  meetingRetentionTimer?: boolean;
 };
 
 export function createApp(options: AppOptions = {}) {
@@ -39,7 +43,18 @@ export function createApp(options: AppOptions = {}) {
       }
     })
   );
+  const meetings = new MeetingService(dataDir);
+  const meetingsReady = meetings.start({
+    resume: options.resumeMeetingJobs ?? process.env.NODE_ENV !== "test",
+    retentionTimer: options.meetingRetentionTimer ?? process.env.NODE_ENV !== "test"
+  });
+  // Keep startup failures observable without an unhandled rejection before the first request.
+  void meetingsReady.catch(() => console.error("Meeting startup failed."));
+  app.locals.meetings = meetings;
+  app.locals.meetingsReady = meetingsReady;
+  app.use("/api", createMeetingChunkRouter(meetings, meetingsReady));
   app.use(express.json({ limit: "5mb" }));
+  app.use("/api", createMeetingRouter(meetings, meetingsReady));
   app.use("/api", createApiRouter(dataDir, options.uploadLimitBytes));
   app.use("/api", (_req, res) => { res.status(404).json({ error: "API route not found." }); });
 

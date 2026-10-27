@@ -1,0 +1,392 @@
+import { randomUUID } from "node:crypto";
+import { mkdir, readdir, readFile, open, rename, rm, stat } from "node:fs/promises";
+import { join } from "node:path";
+import { readJsonFile, withFileLock, writeJsonFile } from "./persistence.js";
+import { isProvider, processTranscript } from "./providers/index.js";
+import { transcribeMeeting, type MeetingProvider, type MeetingSegment } from "./providers/meetings.js";
+import { defaultPrompts } from "./prompts.js";
+
+export const CHUNK_LIMIT_BYTES = 10 * 1024 * 1024;
+export const AUDIO_RETENTION_MS = 24 * 60 * 60 * 1000;
+export type MeetingStatus = "queued" | "transcribing" | "summarizing" | "done" | "error";
+export type MeetingPart = {
+  part: number;
+  chunks: Record<string, number>;
+  chunkCount?: number;
+  contentType: string;
+  startedAt?: string;
+  endedAt?: string;
+  durationSeconds?: number;
+  provider?: MeetingProvider;
+  model?: string;
+};
+// Segment times are seconds relative to their part. `speaker` retains the raw
+// provider id; `speakerId` is a stable part-scoped key used by speakerNames.
+export type DisplaySegment = MeetingSegment & { part: number; speakerId: string; speakerLabel: string };
+export type Meeting = {
+  id: string; title: string; source: "recording" | "upload"; language: string;
+  createdAt: string; updatedAt: string; finishedAt?: string; completedAt?: string;
+  status: MeetingStatus; progress: number; error?: string;
+  parts: MeetingPart[]; durationSeconds?: number;
+  segments: DisplaySegment[]; speakerNames: Record<string, string>;
+  interruptions: Array<{ afterPart: number; start: string; end: string; text: string }>;
+  transcript: string; protocol: string;
+  provider?: MeetingProvider; model?: string;
+  protocolProvider?: string; protocolModel?: string | null;
+  audioExpiresAt?: string; audioDeletedAt?: string;
+  // Persist the phase so restart/retry can reuse a completed transcription.
+  job?: "transcribe" | "protocol"; requestedProvider?: MeetingProvider;
+};
+export type PartMetadata = Pick<MeetingPart, "part"> & Partial<Pick<MeetingPart, "chunkCount" | "contentType" | "startedAt" | "endedAt" | "durationSeconds">>;
+export class MeetingError extends Error {
+  constructor(public status: number, message: string) { super(message); }
+}
+export function validMeetingId(id: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id);
+}
+export function validIndex(value: string, minimum: number) {
+  return /^(0|[1-9][0-9]{0,5})$/.test(value) && Number(value) >= minimum && Number(value) <= 100000;
+}
+const extensions: Record<string, string> = {
+  "audio/webm": "webm", "video/webm": "webm", "audio/mp4": "m4a", "video/mp4": "mp4",
+  "audio/mpeg": "mp3", "audio/mp3": "mp3", "audio/wav": "wav", "audio/x-wav": "wav",
+  "audio/ogg": "ogg", "application/ogg": "ogg", "audio/flac": "flac", "audio/x-flac": "flac",
+  "audio/aac": "aac", "application/octet-stream": "bin"
+};
+export function normalizeContentType(value: string): string | undefined {
+  const type = value.split(";")[0].trim().toLowerCase();
+  return Object.hasOwn(extensions, type) ? type : undefined;
+}
+function audioName(part: MeetingPart) { return `audio.${extensions[part.contentType] ?? "bin"}`; }
+function sniffContentType(buffer: Buffer): string {
+  if (buffer.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))) return "audio/webm";
+  if (buffer.toString("ascii", 4, 8) === "ftyp") return "audio/mp4";
+  if (buffer.toString("ascii", 0, 4) === "RIFF") return "audio/wav";
+  if (buffer.toString("ascii", 0, 4) === "OggS") return "audio/ogg";
+  if (buffer.toString("ascii", 0, 4) === "fLaC") return "audio/flac";
+  if (buffer.toString("ascii", 0, 3) === "ID3" || (buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0)) return "audio/mpeg";
+  return "application/octet-stream";
+}
+export function renderTranscript(meeting: Meeting) {
+  const lines: string[] = [];
+  for (const part of meeting.parts) {
+    const gap = meeting.interruptions.find(item => item.afterPart === part.part - 1);
+    if (gap) lines.push(gap.text);
+    for (const segment of meeting.segments.filter(item => item.part === part.part)) {
+      const name = Object.hasOwn(meeting.speakerNames, segment.speakerId) ? meeting.speakerNames[segment.speakerId] : segment.speakerLabel;
+      lines.push(`[${formatTime(segment.start)}] ${name}: ${segment.text}`);
+    }
+  }
+  return lines.join("\n");
+}
+function formatTime(seconds: number) {
+  return [Math.floor(seconds / 3600), Math.floor(seconds % 3600 / 60), Math.floor(seconds % 60)]
+    .map(value => String(value).padStart(2, "0")).join(":");
+}
+
+export class MeetingService {
+  private root: string;
+  private pending: string[] = [];
+  private scheduled = new Set<string>();
+  private active = 0;
+  private stopped = false;
+  private timer?: ReturnType<typeof setInterval>;
+  private idleWaiters: Array<() => void> = [];
+  constructor(private dataDir: string) { this.root = join(dataDir, "meetings"); }
+  private directory(id: string) {
+    if (!validMeetingId(id)) throw new MeetingError(400, "Invalid meeting id.");
+    return join(this.root, id);
+  }
+  private path(id: string) { return join(this.directory(id), "meeting.json"); }
+  private partDirectory(id: string, part: number) { return join(this.directory(id), "audio", `part-${part}`); }
+  async get(id: string): Promise<Meeting> {
+    const meeting = await readJsonFile(this.path(id)) as Meeting | null;
+    if (!meeting) throw new MeetingError(404, "Meeting not found.");
+    return meeting;
+  }
+  async list(): Promise<Meeting[]> {
+    let entries;
+    try { entries = await readdir(this.root, { withFileTypes: true }); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; }
+    const meetings: Meeting[] = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !validMeetingId(entry.name)) continue;
+      try { meetings.push(await this.get(entry.name)); }
+      catch (error) { if (!(error instanceof MeetingError && error.status === 404)) throw error; }
+    }
+    return meetings.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+  async create(input: Pick<Meeting, "title" | "source" | "language">) {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    const meeting: Meeting = { ...input, id, createdAt: now, updatedAt: now, status: "queued", progress: 0,
+      parts: [], segments: [], speakerNames: {}, interruptions: [], transcript: "", protocol: "" };
+    await withFileLock(this.path(id), () => writeJsonFile(this.path(id), meeting));
+    return id;
+  }
+  private async change<T>(id: string, change: (meeting: Meeting) => Promise<T> | T): Promise<T> {
+    return withFileLock(this.path(id), async () => {
+      const meeting = await this.get(id);
+      const result = await change(meeting);
+      meeting.updatedAt = new Date().toISOString();
+      await writeJsonFile(this.path(id), meeting);
+      return result;
+    });
+  }
+  async upload(id: string, partNumber: number, n: number, body: Buffer, contentType: string) {
+    if (!Number.isInteger(partNumber) || partNumber < 1 || partNumber > 100000 || !Number.isInteger(n) || n < 0 || n > 100000) {
+      throw new MeetingError(400, "Invalid part or chunk index.");
+    }
+    if (!body.length || body.length > CHUNK_LIMIT_BYTES) throw new MeetingError(body.length ? 413 : 400, "Invalid chunk size.");
+    await this.change(id, async meeting => {
+      if (meeting.finishedAt) throw new MeetingError(409, "Meeting already finished.");
+      let part = meeting.parts.find(item => item.part === partNumber);
+      const currentSize = meeting.parts.reduce((sum, item) => sum + Object.values(item.chunks).reduce((a, b) => a + b, 0), 0);
+      if (currentSize - (part?.chunks[n] ?? 0) + body.length > 200 * 1024 * 1024) throw new MeetingError(413, "Meeting audio exceeds 200 MB.");
+      if (!part) {
+        part = { part: partNumber, chunks: {}, contentType };
+        meeting.parts.push(part); meeting.parts.sort((a, b) => a.part - b.part);
+      }
+      if (part.contentType === "application/octet-stream" && contentType !== "application/octet-stream") part.contentType = contentType;
+      const dir = this.partDirectory(id, partNumber);
+      await mkdir(dir, { recursive: true });
+      const target = join(dir, `chunk-${n}`);
+      const handle = await open(`${target}.tmp`, "w");
+      try { await handle.writeFile(body); await handle.sync(); } finally { await handle.close(); }
+      await rename(`${target}.tmp`, target);
+      part.chunks[n] = body.length;
+    });
+  }
+  async finish(id: string, metadata: PartMetadata[], durationSeconds?: number) {
+    await this.change(id, meeting => {
+      if (meeting.finishedAt) throw new MeetingError(409, "Meeting already finished.");
+      for (const meta of metadata) {
+        let part = meeting.parts.find(item => item.part === meta.part);
+        if (!part) { part = { part: meta.part, chunks: {}, contentType: "application/octet-stream" }; meeting.parts.push(part); }
+        for (const key of ["chunkCount", "contentType", "startedAt", "endedAt", "durationSeconds"] as const) {
+          if (meta[key] !== undefined) Object.assign(part, { [key]: meta[key] });
+        }
+      }
+      meeting.parts.sort((a, b) => a.part - b.part);
+      if (durationSeconds !== undefined && meeting.parts.length === 1 && meeting.parts[0].durationSeconds === undefined) {
+        meeting.parts[0].durationSeconds = durationSeconds;
+      }
+      meeting.durationSeconds = durationSeconds ?? meeting.parts.reduce((sum, part) => sum + partDuration(part), 0);
+      meeting.finishedAt = new Date().toISOString(); meeting.status = "queued"; meeting.job = "transcribe";
+    });
+    this.enqueue(id);
+  }
+  async retry(id: string, provider?: MeetingProvider) {
+    await this.change(id, meeting => {
+      if (this.scheduled.has(id) || meeting.status !== "error" || !meeting.finishedAt) throw new MeetingError(409, "Meeting is not retryable.");
+      if (meeting.audioDeletedAt && (provider || meeting.job !== "protocol")) throw new MeetingError(409, "Meeting audio was deleted.");
+      if (provider) { meeting.requestedProvider = provider; meeting.job = "transcribe"; }
+      meeting.status = "queued"; meeting.progress = 0; delete meeting.error;
+    });
+    this.enqueue(id);
+  }
+  async protocol(id: string) {
+    await this.change(id, meeting => {
+      if (this.scheduled.has(id) || !["done", "error"].includes(meeting.status) || meeting.job !== "protocol" || !meeting.segments.length) throw new MeetingError(409, "Meeting transcript is not ready.");
+      meeting.job = "protocol"; meeting.status = "queued"; meeting.progress = 0; delete meeting.error;
+    });
+    this.enqueue(id);
+  }
+  async patch(id: string, input: { title?: string; speakerNames?: Record<string, string> }) {
+    return this.change(id, meeting => {
+      if (input.title !== undefined) meeting.title = input.title;
+      if (input.speakerNames) {
+        if (this.scheduled.has(id)) throw new MeetingError(409, "Meeting is still processing.");
+        const known = new Set(meeting.segments.map(segment => segment.speakerId));
+        for (const key of Object.keys(input.speakerNames)) if (!known.has(key)) throw new MeetingError(400, "Unknown speaker id.");
+        // Equal display names merge speakers without destroying the per-part raw ids.
+        meeting.speakerNames = { ...meeting.speakerNames, ...input.speakerNames };
+        meeting.transcript = renderTranscript(meeting);
+      }
+      return meeting;
+    });
+  }
+  async delete(id: string) {
+    await withFileLock(this.path(id), async () => {
+      await this.get(id);
+      await rm(this.directory(id), { recursive: true, force: true });
+    });
+  }
+  async deleteAudio(id: string) {
+    await this.change(id, async meeting => {
+      if (this.scheduled.has(id) || !["done", "error"].includes(meeting.status)) throw new MeetingError(409, "Meeting is still processing.");
+      await this.removeAudio(meeting);
+    });
+  }
+  private async removeAudio(meeting: Meeting) {
+    await rm(join(this.directory(meeting.id), "audio"), { recursive: true, force: true });
+    meeting.audioDeletedAt ??= new Date().toISOString();
+  }
+  async audio(id: string, partNumber: number) {
+    return withFileLock(this.path(id), async () => {
+      const meeting = await this.get(id);
+      const part = meeting.parts.find(item => item.part === partNumber);
+      if (meeting.audioDeletedAt || !part) throw new MeetingError(404, "Meeting audio not found.");
+      const path = join(this.partDirectory(id, partNumber), audioName(part));
+      try { await stat(path); } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new MeetingError(404, "Meeting audio not found.");
+        throw error;
+      }
+      return { path, contentType: part.contentType };
+    });
+  }
+  async cleanup(now = Date.now()) {
+    for (const meeting of await this.list()) {
+      if (!meeting.audioDeletedAt && meeting.audioExpiresAt && Date.parse(meeting.audioExpiresAt) <= now && !this.scheduled.has(meeting.id)) {
+        await this.change(meeting.id, async current => {
+          if (!this.scheduled.has(current.id) && !current.audioDeletedAt && current.audioExpiresAt && Date.parse(current.audioExpiresAt) <= now) await this.removeAudio(current);
+        });
+      }
+    }
+  }
+  async start(options: { resume: boolean; retentionTimer: boolean }) {
+    if (options.resume || options.retentionTimer) await this.cleanup();
+    if (options.resume) {
+      for (const meeting of await this.list()) {
+        if (meeting.finishedAt && ["queued", "transcribing", "summarizing"].includes(meeting.status)) {
+          await this.change(meeting.id, current => { current.status = "queued"; delete current.error; });
+          this.enqueue(meeting.id);
+        }
+      }
+    }
+    if (options.retentionTimer) {
+      this.timer = setInterval(() => { void this.cleanup().catch(() => console.error("Meeting audio cleanup failed.")); }, 60 * 60 * 1000);
+      this.timer.unref();
+    }
+  }
+  async dispose() {
+    this.stopped = true; if (this.timer) clearInterval(this.timer);
+    this.pending = []; // Persisted queued jobs remain available to the next process.
+    await this.idle();
+  }
+  idle(): Promise<void> {
+    return this.active === 0 && this.pending.length === 0 ? Promise.resolve() : new Promise(resolve => this.idleWaiters.push(resolve));
+  }
+  private enqueue(id: string) {
+    if (this.stopped || this.scheduled.has(id)) return;
+    this.scheduled.add(id); this.pending.push(id); this.pump();
+  }
+  private pump() {
+    while (!this.stopped && this.active < 2 && this.pending.length) {
+      const id = this.pending.shift()!; this.active++;
+      void this.run(id).catch(() => console.error("Failed to persist meeting job error.")).finally(() => {
+        this.active--; this.scheduled.delete(id); this.pump();
+      });
+    }
+    if (!this.active && !this.pending.length) this.idleWaiters.splice(0).forEach(resolve => resolve());
+  }
+  private async concatenate(id: string) {
+    await this.change(id, async meeting => {
+      if (!meeting.parts.length) throw new MeetingError(400, "missing chunk: part 1 [0]");
+      const partNumbers = new Set(meeting.parts.map(part => part.part));
+      const missingParts = Array.from({ length: meeting.parts.at(-1)!.part }, (_, i) => i + 1).filter(n => !partNumbers.has(n));
+      if (missingParts.length) throw new MeetingError(400, `missing chunk: missing parts [${missingParts.join(", ")}]`);
+      for (const part of meeting.parts) {
+        const dir = this.partDirectory(id, part.part);
+        let files: string[] = [];
+        try { files = await readdir(dir); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+        const indices = files.filter(file => /^chunk-(0|[1-9][0-9]*)$/.test(file)).map(file => Number(file.slice(6)));
+        const count = part.chunkCount ?? (indices.length ? Math.max(...indices) + 1 : 1);
+        const present = new Set(indices);
+        const missing = Array.from({ length: count }, (_, n) => n).filter(n => !present.has(n));
+        if (missing.length) throw new MeetingError(400, `missing chunk: part ${part.part} [${missing.join(", ")}]`);
+        if (indices.some(n => n >= count)) throw new MeetingError(400, "Chunk count does not match uploaded indices.");
+        if (part.contentType === "application/octet-stream") part.contentType = sniffContentType(await readFile(join(dir, "chunk-0")));
+        const target = join(dir, audioName(part));
+        const output = await open(`${target}.tmp`, "w");
+        try {
+          for (let n = 0; n < count; n++) await output.writeFile(await readFile(join(dir, `chunk-${n}`)));
+          await output.sync();
+        } finally { await output.close(); }
+        await rename(`${target}.tmp`, target);
+      }
+    });
+  }
+  private async run(id: string) {
+    let phase: "transcribe" | "protocol" = "transcribe";
+    try {
+      let meeting = await this.get(id); phase = meeting.job ?? "transcribe";
+      if (phase === "transcribe") {
+        await this.concatenate(id);
+        await this.change(id, current => { current.status = "transcribing"; current.progress = 0; current.segments = []; current.interruptions = []; });
+        meeting = await this.get(id);
+        const settings = await this.settings();
+        const contextBias = Array.isArray(settings.lexicon) ? settings.lexicon.flatMap((entry: unknown) =>
+          isRecord(entry) && typeof entry.correct === "string" ? [entry.correct] : []) : [];
+        for (let i = 0; i < meeting.parts.length; i++) {
+          const part = meeting.parts[i];
+          const result = await transcribeMeeting(join(this.partDirectory(id, part.part), audioName(part)), {
+            language: meeting.language, contextBias, durationSeconds: partDuration(part) || (meeting.parts.length === 1 ? meeting.durationSeconds : undefined),
+            contentType: part.contentType,
+            provider: meeting.requestedProvider ?? (settings.providers?.meetings === "assemblyai" ? "assemblyai" : "mistral")
+          });
+          const labels = new Map<string, string>();
+          const segments: DisplaySegment[] = result.segments.map(segment => {
+            if (!labels.has(segment.speaker)) labels.set(segment.speaker, `Sprecher ${labels.size + 1}`);
+            const label = labels.get(segment.speaker)!;
+            return { ...segment, part: part.part, speakerId: `${part.part}:${segment.speaker}`,
+              speakerLabel: part.part > 1 ? `Teil ${part.part} · ${label}` : label };
+          });
+          await this.change(id, current => {
+            current.segments.push(...segments); current.provider = result.provider; current.model = result.model;
+            const storedPart = current.parts.find(item => item.part === part.part)!;
+            storedPart.provider = result.provider; storedPart.model = result.model;
+            storedPart.durationSeconds = partDuration(part) || Math.max(...result.segments.map(segment => segment.end));
+            current.progress = Math.round((i + 1) / meeting.parts.length * 80);
+          });
+        }
+        await this.change(id, current => {
+          current.interruptions = current.parts.slice(1).flatMap((part, i) => {
+            const before = current.parts[i];
+            if (!before.endedAt || !part.startedAt || Date.parse(part.startedAt) <= Date.parse(before.endedAt)) return [];
+            return [{ afterPart: before.part, start: before.endedAt, end: part.startedAt,
+              text: `[Unterbrechung ${before.endedAt.slice(11, 16)}–${part.startedAt.slice(11, 16)}]` }];
+          });
+          current.durationSeconds = current.parts.reduce((sum, part) => sum + partDuration(part), 0);
+          current.transcript = renderTranscript(current); current.job = "protocol";
+        });
+      }
+      phase = "protocol";
+      await this.change(id, current => { current.status = "summarizing"; current.progress = 85; });
+      meeting = await this.get(id);
+      const settings = await this.settings();
+      const task = meeting.source === "recording" ? "protocol" : "summary";
+      const provider = settings.providers?.[task] ?? "openai";
+      if (!isProvider(provider)) throw new Error("Invalid protocol provider.");
+      const result = await processTranscript(provider, { transcript: renderTranscript(meeting), mode: "formal", task,
+        instructions: typeof settings.prompts?.[task] === "string" ? settings.prompts[task] : defaultPrompts[task] });
+      await this.change(id, current => {
+        current.protocol = result.text; current.protocolProvider = result.provider; current.protocolModel = result.model;
+        current.status = "done"; current.progress = 100; current.completedAt = new Date().toISOString();
+        // Regenerating a protocol must not extend the original audio retention window.
+        if (!current.audioDeletedAt) current.audioExpiresAt ??= new Date(Date.now() + AUDIO_RETENTION_MS).toISOString();
+        delete current.error;
+      });
+    } catch (error) {
+      try {
+        await this.change(id, current => {
+          current.status = "error";
+          current.error = error instanceof MeetingError ? error.message : phase === "transcribe" ? "Meeting transcription failed." : "Meeting protocol generation failed.";
+        });
+      } catch (failure) { if (!(failure instanceof MeetingError && failure.status === 404)) throw failure; }
+    }
+  }
+  private async settings(): Promise<{ providers?: Record<string, unknown>; prompts?: Record<string, unknown>; lexicon?: unknown[] }> {
+    const settings = await readJsonFile(join(this.dataDir, "settings.json"));
+    if (settings !== null && !isRecord(settings)) throw new Error("Invalid settings file.");
+    if (!settings) return {};
+    if (settings.providers !== undefined && !isRecord(settings.providers) || settings.prompts !== undefined && !isRecord(settings.prompts)) throw new Error("Invalid settings file.");
+    return { providers: settings.providers, prompts: settings.prompts, lexicon: Array.isArray(settings.lexicon) ? settings.lexicon : [] };
+  }
+}
+function partDuration(part: MeetingPart): number {
+  return part.durationSeconds ?? (part.startedAt && part.endedAt ? (Date.parse(part.endedAt) - Date.parse(part.startedAt)) / 1000 : 0);
+}
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}

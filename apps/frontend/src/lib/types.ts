@@ -51,5 +51,5 @@ export interface HistoryEntry {
 export interface Providers {
   stt: string[];
   llm: string[];
-  meetings: boolean;
+  meetings: Array<"mistral" | "assemblyai">;
 }

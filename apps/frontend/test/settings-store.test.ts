@@ -23,7 +23,7 @@ function client() {
   return {
     getProviders: vi
       .fn()
-      .mockResolvedValue({ stt: [], llm: [], meetings: false }),
+      .mockResolvedValue({ stt: [], llm: [], meetings: [] }),
     getDefaults: vi.fn().mockResolvedValue(defaults),
     getSettings: vi.fn().mockResolvedValue({}),
     saveSettings: vi.fn().mockResolvedValue({ ok: true }),

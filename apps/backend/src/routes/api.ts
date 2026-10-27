@@ -1,62 +1,14 @@
 import { Request, Response, Router } from "express";
-import { readFile, open, rename, copyFile, mkdir } from "node:fs/promises";
-import { join, dirname } from "node:path";
+import { join } from "node:path";
 import multer from "multer";
 import { isProvider, processTranscript, transcribeAudio, WorkMode } from "../providers/index.js";
-import { defaultPrompts, defaultSummaryPrompt } from "../prompts.js";
-import { transcribeMeeting } from "../providers/assemblyai.js";
+import { defaultPrompts } from "../prompts.js";
+import { readJsonFile, writeJsonFile, withFileLock } from "../persistence.js";
+import { isMeetingProvider, availableMeetingProviders } from "../providers/meetings.js";
 
 import { buildTranslationInstructions, isTargetLanguage, isTranslationLanguage } from "../providers/shared.js";
 
 const validWorkModes: WorkMode[] = ["original", "casual", "formal", "coding"];
-
-// Only a missing file counts as empty state. A malformed file throws, so callers
-// never answer "empty" and let a client overwrite data that still exists on disk.
-async function readJsonFile(path: string): Promise<unknown> {
-  let text: string;
-  try {
-    text = await readFile(path, "utf-8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return null;
-    }
-    throw error;
-  }
-  return JSON.parse(text);
-}
-
-// Write to a temp file and rename it into place, so a crash mid-write cannot
-// leave truncated JSON behind. The previous version is kept as `.bak`.
-async function writeJsonFile(path: string, data: unknown): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-  const tempPath = `${path}.tmp`;
-  const handle = await open(tempPath, "w");
-  try {
-    await handle.writeFile(JSON.stringify(data, null, 2), "utf-8");
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-  try {
-    await copyFile(path, `${path}.bak`);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw error;
-    }
-  }
-  await rename(tempPath, path);
-}
-
-// Serialize all read-modify-write cycles per file; concurrent requests would
-// otherwise read the same state and the later write would drop the earlier one.
-const fileLocks = new Map<string, Promise<unknown>>();
-
-function withFileLock<T>(path: string, task: () => Promise<T>): Promise<T> {
-  const previous = fileLocks.get(path) ?? Promise.resolve();
-  const next = previous.catch(() => undefined).then(task);
-  fileLocks.set(path, next);
-  return next;
-}
 
 export const DEFAULT_UPLOAD_LIMIT_BYTES = 200 * 1024 * 1024;
 
@@ -80,13 +32,13 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
     const configured = ["openai", "mistral", "groq"].filter(provider =>
       Boolean(process.env[`${provider.toUpperCase()}_API_KEY`]?.trim())
     );
-    res.json({ stt: configured, llm: configured, meetings: Boolean(process.env.ASSEMBLYAI_API_KEY?.trim()) });
+    res.json({ stt: configured, llm: configured, meetings: availableMeetingProviders() });
   });
 
   apiRouter.get("/settings/defaults", (_req, res) => {
     res.json({
       version: 1,
-      providers: Object.fromEntries(Object.keys(defaultPrompts).map(mode => [mode, "openai"])),
+      providers: { ...Object.fromEntries(Object.keys(defaultPrompts).map(mode => [mode, "openai"])), meetings: "mistral" },
       prompts: defaultPrompts,
       lexicon: [],
       snippets: [],
@@ -138,14 +90,6 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
     void handleProcess(req, res);
   });
 
-  apiRouter.post("/transcribe-meeting", upload.single("audio"), (req, res) => {
-    void handleTranscribeMeeting(req, res);
-  });
-
-  apiRouter.post("/summarize", (req, res) => {
-    void handleSummarize(req, res);
-  });
-
   async function handleTranscribe(req: Request, res: Response) {
     if (!req.file) {
       sendError(res, 400, "Missing audio file.");
@@ -184,58 +128,6 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
     } catch (error) {
       console.error("Transcription failed", error);
       sendInternalError(res, "Transcription failed.");
-    }
-  }
-
-  async function handleTranscribeMeeting(req: Request, res: Response) {
-    if (!req.file) {
-      sendError(res, 400, "Missing audio file.");
-      return;
-    }
-
-    try {
-      const result = await transcribeMeeting({
-        buffer: req.file.buffer,
-        mimetype: req.file.mimetype || "application/octet-stream"
-      });
-
-      res.json(result);
-    } catch (error) {
-      console.error("Meeting transcription failed", error);
-      sendInternalError(res, "Meeting transcription failed.");
-    }
-  }
-
-  async function handleSummarize(req: Request, res: Response) {
-    const transcript = String(req.body?.transcript ?? "").trim();
-    const provider = req.body?.provider || "openai";
-    const instructions =
-      typeof req.body?.instructions === "string"
-        ? req.body.instructions
-        : defaultSummaryPrompt;
-
-    if (!transcript) {
-      sendError(res, 400, "Missing transcript.");
-      return;
-    }
-
-    if (!isProvider(provider)) {
-      sendError(res, 400, "Invalid provider.");
-      return;
-    }
-
-    try {
-      const result = await processTranscript(provider, {
-        transcript,
-        mode: "formal",
-        instructions,
-        translateToEnglish: req.body?.translateToEnglish === true
-      });
-
-      res.json({ summary: result.text, provider: result.provider, model: result.model });
-    } catch (error) {
-      console.error("Meeting summarization failed", error);
-      sendInternalError(res, "Meeting summarization failed.");
     }
   }
 
@@ -425,7 +317,7 @@ function isValidSettings(value: unknown): boolean {
   if (!isRecord(providers) || !isRecord(prompts)) return false;
   const modes = Object.keys(defaultPrompts);
   return modes.every(mode => isProvider(providers[mode])) &&
-    Object.values(providers).every(isProvider) &&
+    Object.entries(providers).every(([key, provider]) => key === "meetings" ? isMeetingProvider(provider) : isProvider(provider)) &&
     modes.every(mode => typeof prompts[mode] === "string") &&
     Object.values(prompts).every(prompt => typeof prompt === "string") &&
     Array.isArray(value.lexicon) && Array.isArray(value.snippets) && typeof value.ownSpeakerName === "string" &&

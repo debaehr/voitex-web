@@ -19,6 +19,7 @@ export type ProviderResult = {
 export type ProcessInput = {
   transcript: string;
   mode: WorkMode;
+  task?: "dictation" | "protocol" | "summary";
   instructions?: string;
   translateToEnglish?: boolean;
   targetLanguage?: TargetLanguage;
@@ -97,4 +98,8 @@ async function readResponse<T>(response: Response): Promise<T> {
 // Omitting the field lets the STT provider detect the language automatically.
 export function transcriptionLanguageFields(language?: string): Record<string, string> {
   return language && language !== "auto" ? { language } : {};
+}
+
+export function outputTokenLimit(input: ProcessInput): number {
+  return input.task === "protocol" || input.task === "summary" ? 8000 : 4000;
 }

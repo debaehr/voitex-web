@@ -46,3 +46,15 @@ for (const [name, provider] of Object.entries({ openai, mistral, groq })) {
     }
   });
 }
+
+for (const [name, provider] of Object.entries({ openai, mistral, groq })) {
+  it.each([undefined, "dictation", "protocol", "summary"] as const)(`${name} uses the task token limit for %s`, async task => {
+    vi.stubEnv(`${name.toUpperCase()}_API_KEY`, "dummy-key");
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: "Final" } }] })));
+    vi.stubGlobal("fetch", fetchMock);
+    await provider.processTranscript({ transcript: "Text", mode: "formal", task });
+    const limit = task === "protocol" || task === "summary" ? 8000 : 4000;
+    if (name === "openai") expect(respond).toHaveBeenCalledWith(expect.objectContaining({ max_output_tokens: limit }));
+    else expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toHaveProperty("max_tokens", limit);
+  });
+}

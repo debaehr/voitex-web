@@ -1,3 +1,4 @@
+import { outputTokenLimit } from "./shared.js";
 import { modeInstructions } from "../prompts.js";
 import { transcriptionLanguageFields } from "./shared.js";
 import {
@@ -43,7 +44,7 @@ export async function processTranscript(input: ProcessInput): Promise<ProviderRe
         { role: "system", content: instructions },
         { role: "user", content: input.transcript }
       ],
-      max_tokens: 1200
+      max_tokens: outputTokenLimit(input)
     }
   );
 

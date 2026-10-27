@@ -1,145 +1,61 @@
-export type MeetingTranscript = {
-  transcript: string;
-  utterances: Array<{
-    speaker: string;
-    text: string;
-    start: number;
-    end: number;
-  }>;
-  provider: string;
-  model: string;
-};
-
-
-type UploadResponse = {
-  upload_url: string;
-};
+import { meetingRequest } from "./meeting-http.js";
+import { readFile } from "node:fs/promises";
+import type { MeetingTranscription, MeetingTranscriptionOptions } from "./meetings.js";
 
 type TranscriptResponse = {
   id: string;
   status: "queued" | "processing" | "completed" | "error";
   text?: string;
-  error?: string;
-  utterances?: Array<{
-    speaker: string;
-    text: string;
-    start: number;
-    end: number;
-  }>;
+  utterances?: Array<{ speaker: string; text: string; start: number; end: number }>;
 };
-
 const baseUrl = "https://api.assemblyai.com";
 
-export async function transcribeMeeting(input: { buffer: Buffer; mimetype: string }): Promise<MeetingTranscript> {
-  const apiKey = apiKeyOrThrow();
-  const uploadUrl = await uploadAudio(apiKey, input.buffer, input.mimetype);
-  const transcriptId = await createTranscript(apiKey, {
-    audioUrl: uploadUrl,
-    speakerLabels: true,
-    disfluencies: false
-  });
+export async function transcribeMeeting(filePath: string, options: MeetingTranscriptionOptions): Promise<MeetingTranscription> {
+  const apiKey = process.env.ASSEMBLYAI_API_KEY;
+  if (!apiKey?.trim()) throw new Error("AssemblyAI is not configured.");
+  const model = process.env.ASSEMBLYAI_MEETING_MODEL?.trim() || "universal-2";
+  const uploadUrl = await uploadAudio(apiKey, await readFile(filePath), options.contentType);
+  const transcriptId = await createTranscript(apiKey, uploadUrl, model, options.language);
   const transcript = await pollTranscript(apiKey, transcriptId);
-  const utterances = transcript.utterances ?? [];
-
   return {
-    transcript: formatUtterances(utterances, transcript.text ?? ""),
-    utterances,
-    provider: "AssemblyAI",
-    model: "Universal-2 + speaker_labels"
+    provider: "assemblyai", model,
+    // AssemblyAI timestamps are milliseconds; the public meeting contract uses seconds.
+    segments: transcript.utterances?.length ? transcript.utterances.map(item => ({
+      speaker: String(item.speaker), text: item.text, start: item.start / 1000, end: item.end / 1000
+    })) : transcript.text?.trim() ? [{ speaker: "unknown", text: transcript.text, start: 0, end: options.durationSeconds ?? 0 }] : []
   };
 }
 
-async function uploadAudio(apiKey: string, buffer: Buffer, mimetype: string) {
-  const response = await fetch(`${baseUrl}/v2/upload`, {
-    method: "POST",
-    headers: {
-      Authorization: apiKey,
-      "Content-Type": mimetype || "application/octet-stream"
-    },
-    body: buffer
+async function uploadAudio(apiKey: string, buffer: Buffer, contentType?: string) {
+  const response = await meetingRequest(`${baseUrl}/v2/upload`, {
+    method: "POST", headers: { Authorization: apiKey, "Content-Type": contentType || "application/octet-stream" },
+    body: buffer, signal: AbortSignal.timeout(30 * 60 * 1000)
   });
-
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-
-  const data = (await response.json()) as UploadResponse;
-  return data.upload_url;
+  if (!response.ok) throw new Error("AssemblyAI upload failed.");
+  return (await response.json() as { upload_url: string }).upload_url;
 }
-
-async function createTranscript(
-  apiKey: string,
-  input: { audioUrl: string; speakerLabels: boolean; disfluencies: boolean }
-) {
-  const response = await fetch(`${baseUrl}/v2/transcript`, {
-    method: "POST",
-    headers: {
-      Authorization: apiKey,
-      "Content-Type": "application/json"
-    },
+async function createTranscript(apiKey: string, audioUrl: string, model: string, language?: string) {
+  const response = await meetingRequest(`${baseUrl}/v2/transcript`, {
+    method: "POST", headers: { Authorization: apiKey, "Content-Type": "application/json" },
     body: JSON.stringify({
-      audio_url: input.audioUrl,
-      speech_models: ["universal-2"],
-      speaker_labels: input.speakerLabels,
-      disfluencies: input.disfluencies,
-      language_code: "de"
-    })
+      audio_url: audioUrl, speech_models: [model], speaker_labels: true, disfluencies: false,
+      ...(language && language !== "auto" ? { language_code: language } : { language_detection: true })
+    }), signal: AbortSignal.timeout(60 * 1000)
   });
-
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-
-  const data = (await response.json()) as TranscriptResponse;
-  return data.id;
+  if (!response.ok) throw new Error("AssemblyAI transcription failed.");
+  return (await response.json() as TranscriptResponse).id;
 }
-
 async function pollTranscript(apiKey: string, transcriptId: string) {
-  // Hard timeout prevents endless polling when the upstream job stalls.
-  const deadline = Date.now() + 12 * 60 * 1000;
-
+  const deadline = Date.now() + 3 * 60 * 60 * 1000;
   while (Date.now() < deadline) {
-    const response = await fetch(`${baseUrl}/v2/transcript/${transcriptId}`, {
-      headers: { Authorization: apiKey }
+    const response = await meetingRequest(`${baseUrl}/v2/transcript/${encodeURIComponent(transcriptId)}`, {
+      headers: { Authorization: apiKey }, signal: AbortSignal.timeout(Math.min(60 * 1000, Math.max(1, deadline - Date.now())))
     });
-
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-
-    const data = (await response.json()) as TranscriptResponse;
-
-    if (data.status === "completed") {
-      return data;
-    }
-
-    if (data.status === "error") {
-      throw new Error(data.error || "AssemblyAI transcription failed.");
-    }
-
-    // AssemblyAI jobs are asynchronous; polling every 3s balances latency and rate limits.
-    await wait(3000);
+    if (!response.ok) throw new Error("AssemblyAI polling failed.");
+    const data = await response.json() as TranscriptResponse;
+    if (data.status === "completed") return data;
+    if (data.status === "error") throw new Error("AssemblyAI transcription failed.");
+    await new Promise(resolve => setTimeout(resolve, Math.min(3000, Math.max(0, deadline - Date.now()))));
   }
-
   throw new Error("AssemblyAI transcription timed out.");
-}
-
-function formatUtterances(utterances: MeetingTranscript["utterances"], fallback: string) {
-  if (!utterances.length) {
-    return fallback;
-  }
-
-  return utterances.map((item) => `Sprecher ${item.speaker}: ${item.text}`).join("\n");
-}
-
-function wait(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function apiKeyOrThrow() {
-  if (!process.env.ASSEMBLYAI_API_KEY) {
-    throw new Error("ASSEMBLYAI_API_KEY is not configured.");
-  }
-
-  return process.env.ASSEMBLYAI_API_KEY;
 }

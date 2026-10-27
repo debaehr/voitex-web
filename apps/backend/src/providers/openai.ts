@@ -1,3 +1,4 @@
+import { outputTokenLimit } from "./shared.js";
 import { modeInstructions } from "../prompts.js";
 import { buildProcessInstructions, transcriptionLanguageFields } from "./shared.js";
 import OpenAI, { toFile } from "openai";
@@ -38,7 +39,7 @@ export async function processTranscript(input: ProcessInput) {
     model: "gpt-4o-mini",
     instructions,
     input: input.transcript,
-    max_output_tokens: 1200
+    max_output_tokens: outputTokenLimit(input)
   });
 
   return {

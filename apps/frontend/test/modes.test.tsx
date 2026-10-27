@@ -123,7 +123,7 @@ describe("mode field validation", () => {
 it("saves customModes and hiddenModes through the existing settings store and PUT", async () => {
   const fetch = vi.fn(async (_path: string, _init?: RequestInit) => new Response(JSON.stringify({ ok: true })));
   vi.stubGlobal("fetch", fetch);
-  const store = new SettingsStore({ getProviders: async () => ({ stt: [], llm: [], meetings: false }),
+  const store = new SettingsStore({ getProviders: async () => ({ stt: [], llm: [], meetings: [] }),
     getDefaults: async () => defaults, getSettings: async () => defaults, saveSettings: api.saveSettings });
   await store.load();
   const draft = deleteMode(withCustom(), "original");
