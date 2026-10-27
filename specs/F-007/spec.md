@@ -1,44 +1,41 @@
 # F-007 — Transkript: Audiodatei hochladen mit Sprecherzuordnung und Zusammenfassung
 
-Status: Entwurf · 27.10.2026 · Freigabe: ausstehend
+Status: Entwurf v2 · 27.10.2026 · Freigabe: ausstehend
 
 ## Ziel
 
-Eine vorhandene Aufnahme (z. B. vom Handy-Diktiergerät oder aus Teams) hochladen und
-wie in F-006 Transkript mit Sprechern und Zusammenfassung erhalten.
+Eine vorhandene Aufnahme (Handy-Diktiergerät, Teams-Export …) hochladen und wie in
+F-006 ein Transkript mit Sprechern und eine Zusammenfassung erhalten.
 Menüpunkt „Transkript“ (Section-ID `meetings`).
 
 ## Verhalten
 
-- „Datei transkribieren …“ wählt eine Datei (mp3, m4a, mp4, wav, webm, ogg). Optional Titel.
-- **Bis 25 MB:** direkt als ein Segment an dieselbe Segment-Schnittstelle wie F-006.
-- **Über 25 MB:** Der Browser zerlegt die Datei in Teile ≤ 10 min:
-  Decodieren mit Web Audio (`OfflineAudioContext`, 16 kHz mono) und Kodieren als WAV
-  16 bit (10 min ≈ 19 MB < 25 MB), ohne neue Abhängigkeit. Speicherbedarf ~230 MB je
-  Stunde Audio → **am PC bis 3 h**, auf dem Handy Warnung ab 60 min. Schlägt das
-  Decodieren fehl (Format/Speicher): klare Meldung mit Tipp („als MP3 exportieren“).
-- Danach identisch zu F-006: Segmente nacheinander hochladen (Fortschritt „Teil 3/12“),
-  Sprecher-Referenzen aus Teil 1, Retry, Zusammenfassung am Ende.
-- Datei und Teile werden nur im Browser gehalten; nach Erfolg verworfen.
-- Ergebnisansicht, Speicherung, Sprecher umbenennen, Löschen: wie F-006 (gleiche
-  Sitzungsdaten, `source: "upload"` statt `"recording"`). Die Liste unter „Transkript“
-  zeigt hochgeladene Sitzungen; „Meetings“ zeigt aufgenommene.
-- Zusammenfassung nutzt den Prompt „Zusammenfassung“ (F-011); die heutige
-  Platzhalter-Seite „Zusammenfassungs-Prompt“ und „Einstellungen“ unter Transkript
-  wird durch die echten Einstellungen ersetzt (Prompt-Bearbeitung bleibt in den
-  Einstellungen; hier nur Verweis + Name der eigenen Stimme).
-- Der alte synchrone Endpunkt `/api/transcribe-meeting` (AssemblyAI) entfällt.
+- „Datei transkribieren …“: Datei wählen (mp3, m4a, mp4, wav, webm, ogg, flac),
+  optional Titel und Sprache. Grenze **200 MB** (nginx); darüber klare Meldung.
+- Upload in 5-MB-Stücken über dieselbe Stück-Schnittstelle wie F-006 (ein Teil),
+  Fortschrittsbalken, Retry je Stück; danach `finish` → derselbe Server-Job wie F-006
+  (Mistral Standard, AssemblyAI Fallback), aber mit Prompt „Zusammenfassung“ statt
+  „Protokoll“. Kein Zerlegen im Browser.
+- Mistral-Grenze 3 h je Anfrage: längere Dateien gehen direkt an AssemblyAI (bis 10 h);
+  die Dauer liefert der Browser beim Auswählen (Audio-Metadaten), sonst Fallback nach
+  Mistral-Fehler.
+- Ergebnisansicht, Speicherung, Sprecher umbenennen, Löschen, Audio-Löschung: wie F-006
+  (`source: "upload"`). „Transkript“ listet hochgeladene, „Meetings“ aufgenommene
+  Sitzungen.
+- Die heutigen Platzhalter unter „Transkript“ („Einstellungen“, „Zusammenfassungs-Prompt“)
+  werden ersetzt: Prompt-Bearbeitung bleibt in den Einstellungen (Verweis), hier nur
+  „Name der eigenen Stimme“ (Einstellung `ownSpeakerName`, bereits vorhanden).
 
 ## Nicht Teil dieses Specs
 
-Video-Dateien > 25 MB mit Bildspur (nur Tonspur wird decodiert, falls möglich),
-Stapel-Upload mehrerer Dateien, Links (Teams/SharePoint).
+Stapel-Upload mehrerer Dateien, Links (Teams/SharePoint), Dateien > 200 MB.
 
 ## Abnahme
 
-- A1 Backend: wie F-006 A1 für `source: "upload"`; `/api/transcribe-meeting` entfernt.
-- A2 Frontend-Tests: Aufteilen in ≤ 10-min-WAV-Teile (Länge, Header, Größe < 25 MB),
-  kleine Datei ohne Aufteilen, Fehlermeldung bei nicht decodierbarer Datei, Fortschritt.
+- A1 Backend: wie F-006 A1 für `source: "upload"`; Dateien > 3 h direkt an AssemblyAI;
+  `/api/transcribe-meeting` entfernt.
+- A2 Frontend-Tests: Stückweiser Upload mit Fortschritt und Retry, Größen-/Formatprüfung,
+  Dauer-Ermittlung, Polling bis `done`.
 - A3 `pnpm check`, `pnpm test`, `pnpm build` grün.
-- A4 Am Effekt (Mensch): eine 10-MB-Datei und eine > 25-MB-Datei (≥ 1 h) am PC
-  hochladen → Transkript mit Sprechern und Zusammenfassung.
+- A4 Am Effekt (Mensch): eine kurze Datei und eine ≥ 1-h-Datei hochladen → Transkript
+  mit Sprechern und Zusammenfassung.

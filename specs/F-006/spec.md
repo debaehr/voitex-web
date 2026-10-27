@@ -1,109 +1,119 @@
 # F-006 — Meetings: Langzeitaufnahme bis 3 h mit Sprecherzuordnung und Protokoll
 
-Status: Entwurf · 27.10.2026 · Freigabe: ausstehend
+Status: Entwurf v2 · 27.10.2026 · Freigabe: ausstehend
 
 ## Ziel
 
 Eine Besprechung (1–3 h) über das Gerätemikrofon aufnehmen — am Firmen-PC und auf dem
 Handy (Android und iPhone) — und daraus ein Transkript mit Sprecherzuordnung und ein
-Protokoll erzeugen. Eine Unterbrechung darf die Aufnahme nicht verlieren.
-Menüpunkt „Meetings“ (Section-ID `protocol`).
+Protokoll erzeugen. Eine Unterbrechung oder ein Absturz darf die Aufnahme nicht
+verlieren. Menüpunkt „Meetings“ (Section-ID `protocol`).
 
-## Anbieter (Entscheidung Mensch 27.10.2026: nur OpenAI)
+## Anbieter (Entscheidung Mensch 27.10.2026)
 
-- Transkription mit Sprechern: `gpt-4o-transcribe-diarize`, `response_format=diarized_json`,
-  `chunking_strategy=auto`. **Abgekündigt, Abschaltung 26.02.2027**; der Nachfolger
-  `gpt-transcribe` hat laut Doku keine Sprecherzuordnung.
-- Deshalb ist der Transkriptionsschritt ein austauschbarer Baustein im Backend
-  (`transcribeSegment(audio, options) → { segments: [{speaker, start, end, text}] }`).
-  Fallback ohne Sprecher: `gpt-4o-transcribe` bzw. später `gpt-transcribe`
-  (alle Abschnitte Sprecher „—“). Umschaltung per Umgebungsvariable
-  `MEETING_TRANSCRIBE_MODEL`, Standard = diarize.
-- Protokoll: Chat-Modell wie bei den Modi (Anbieter + Prompt „Protokoll“ aus F-011).
+- **Standard: Mistral Voxtral** — `POST https://api.mistral.ai/v1/audio/transcriptions`,
+  Modell `voxtral-mini-transcribe-3` (Modell-ID per Umgebungsvariable
+  `MISTRAL_MEETING_MODEL` änderbar, z. B. `voxtral-small-transcribe-3`, derzeit Preview),
+  `diarize=true`, `timestamp_granularities=segment`, `context_bias` = korrekte
+  Lexikon-Begriffe (F-009). Laut Doku bis 3 h je Anfrage, Dateien bis 500 MB.
+  Antwort: `segments[]` mit `text`, `start`, `end`, `speaker_id`.
+- **Fallback: AssemblyAI** — Upload + `POST /v2/transcript` mit `speaker_labels: true`,
+  Polling (bis 10 h je Datei). Greift automatisch, wenn Mistral fehlschlägt oder kein
+  Mistral-Schlüssel gesetzt ist; das Ergebnis nennt den genutzten Anbieter.
+- Beide hinter einem Baustein im Backend:
+  `transcribeMeeting(file, options) → { provider, model, segments: [{speaker, start, end, text}] }`.
+  Sprecher-IDs werden einheitlich auf „Sprecher 1, 2, …“ abgebildet.
+- Einstellungen → Anbieter: neue Zeile „Meetings“ (Mistral | AssemblyAI), Standard
+  Mistral; nicht verfügbare Anbieter „(kein Schlüssel)“.
+- Sprache: Aufnahmesprache aus dem Overlay (Standard DE) wird mitgegeben; ob Mistral
+  `language` zusammen mit `diarize` akzeptiert, wird in Lauf 1 live geprüft — sonst
+  automatische Erkennung.
+- Protokoll: Chat-Modell laut Einstellung „Protokoll“ (F-011).
 
 ## Aufnahme (Browser)
 
 1. **Vor dem Start** Hinweis-Karte: alle Teilnehmenden informieren; Gerät nahe der
-   Gesprächsrunde; App geöffnet lassen. Auf iPhone zusätzlich: „Wechsel auf den
-   Homescreen oder Sperren hält die Aufnahme an.“ Optional Titel der Sitzung.
-2. **Segmente:** Der Recorder wird alle **10 Minuten** neu gestartet (neuer
-   `MediaRecorder` auf derselben Spur, alter wird danach gestoppt), damit jedes Segment
-   eine eigenständige, gültige Audiodatei < 25 MB ist (OpenAI-Grenze). Opus/WebM bzw.
-   AAC/MP4 (iOS), Bitrate 32 kbit/s mono, wo einstellbar.
-3. **Laufende Sicherung:** `timeslice` 5 s; jedes Stück wird sofort in IndexedDB
-   gespeichert (Sitzung → Segment → Stücke). Ein Absturz/Neuladen verliert höchstens
-   ~5 s. Beim nächsten Öffnen: „Nicht abgeschlossene Aufnahme gefunden — fortsetzen /
-   jetzt verarbeiten / verwerfen“.
-4. **Bildschirm wach:** Screen Wake Lock während der Aufnahme; nach Rückkehr in die
-   App erneut anfordern. Ohne Unterstützung: Hinweis.
-5. **Unterbrechung erkennen:** Spur endet/stummgeschaltet, `visibilitychange` (iOS)
-   oder Recorder-Fehler → Status „Unterbrochen“, deutlicher Hinweis, Knopf
-   „Fortsetzen“ startet ein neues Segment derselben Sitzung. Die Lücke wird im
-   Transkript als „[Unterbrechung hh:mm–hh:mm]“ markiert.
-6. **Anzeige während der Aufnahme:** Laufzeit, Pegel, Segmentzähler, Status der
-   Verarbeitung je Segment; Knöpfe Pause/Fortsetzen und Beenden (mit Bestätigung).
-   Maximal 3 h 15 min, dann automatischer Stopp mit Hinweis.
-7. Diktat-Aufnahme ist während einer Meeting-Aufnahme gesperrt (ein Mikrofon).
+   Gesprächsrunde; App geöffnet lassen. Auf dem iPhone zusätzlich: „Wechsel auf den
+   Homescreen oder Sperren hält die Aufnahme an.“ Optional Titel.
+2. Ein `MediaRecorder` je **Teil** (ein Teil = Aufnahme ohne Unterbrechung), Opus/WebM
+   bzw. AAC/MP4 (iOS), 32 kbit/s mono wo einstellbar (3 h ≈ 45 MB). `timeslice` 5 s.
+3. **Doppelte Sicherung jedes 5-s-Stücks:** sofort in IndexedDB **und** fortlaufend an
+   den Server (`PUT /api/meetings/:id/parts/:part/chunks/:n`, idempotent, Retry mit
+   Backoff, offline-fest). Absturz/Neuladen verliert höchstens ~5 s. Beim nächsten
+   Öffnen: „Nicht abgeschlossene Aufnahme — fortsetzen / jetzt verarbeiten / verwerfen“;
+   fehlende Stücke werden aus IndexedDB nachgeliefert.
+4. **Bildschirm wach** (Screen Wake Lock), nach Rückkehr erneut anfordern; ohne
+   Unterstützung Hinweis.
+5. **Unterbrechung erkennen** (Spur endet/stumm, `visibilitychange`, Recorder-Fehler) →
+   Status „Unterbrochen“, deutlicher Hinweis, „Fortsetzen“ startet einen neuen Teil.
+   Lücke im Transkript: „[Unterbrechung hh:mm–hh:mm]“.
+6. Anzeige: Laufzeit, Pegel, Upload-Stand („gesichert bis hh:mm:ss“); Knöpfe
+   Pause/Fortsetzen, Beenden (mit Bestätigung). Maximal 3 h, dann automatischer Stopp.
+7. Diktat ist während einer Meeting-Aufnahme gesperrt (ein Mikrofon).
 
-## Verarbeitung (segmentweise, schon während der Aufnahme)
+## Verarbeitung (asynchron auf dem Server)
 
-- Jedes abgeschlossene Segment wird sofort an `POST /api/meetings/:id/segments`
-  hochgeladen und transkribiert (Antwort < 300 s nginx-Timeout, Segment ≤ 10 min).
-  Fehlgeschlagene Uploads werden mit Backoff wiederholt (offline-fest); Audio bleibt bis
-  zum Erfolg in IndexedDB.
-- **Sprecher über Segmente konsistent:** Nach Segment 1 schneidet der Browser je
-  erkanntem Sprecher (max. 4) einen 4–10-s-Ausschnitt aus Segment 1 (Web Audio
-  `decodeAudioData` → WAV 16 kHz mono, ohne neue Abhängigkeit) und sendet diese als
-  `known_speaker_references` mit allen folgenden Segmenten. Mehr als 4 Sprecher oder
-  Fehlschlag → Sprecher je Segment, Kennzeichnung im Transkript.
-- Nach dem letzten Segment: `POST /api/meetings/:id/protocol` erzeugt das Protokoll aus
-  dem Gesamttranskript (Sprechernamen eingesetzt). `max_output_tokens` für Protokolle
-  8000, Diktat 4000 (behebt die 1200-Token-Grenze).
+- „Beenden“ → `POST /api/meetings/:id/finish`. Der Server setzt die Stücke je Teil zu
+  einer Datei zusammen (Stücke eines Recorders ergeben eine gültige Datei) und startet
+  einen **Job**: Transkription je Teil → Protokoll. Status in der Sitzungsdatei
+  (`queued | transcribing | summarizing | done | error`), Browser fragt alle 5 s ab.
+  Keine lange HTTP-Anfrage durch nginx (300-s-Grenze).
+- Jobs überstehen einen PM2-Neustart: beim Start werden nicht abgeschlossene Jobs neu
+  aufgenommen (Audio liegt noch vor).
+- Mehrere Teile (nach Unterbrechung) werden einzeln transkribiert; Sprecher gelten je
+  Teil („Teil 2 · Sprecher 1“) und lassen sich beim Umbenennen zusammenführen.
+- Fehler → Status `error` mit Grund, Knopf „Erneut versuchen“ (wahlweise mit dem
+  anderen Anbieter).
+- `max_output_tokens`/`max_tokens` je Aufgabe: Diktat 4000, Protokoll/Zusammenfassung
+  8000 (behebt die 1200-Token-Grenze für alle Chat-Anbieter).
 
 ## Ergebnis
 
-- Sitzungsliste „Letzte Sitzungen“ mit Titel, Datum, Dauer, Status.
+- Liste „Letzte Sitzungen“ mit Titel, Datum, Dauer, Status/Fortschritt.
 - Detail: Protokoll (Kopieren, Markdown-Download), Transkript mit Sprecher und Zeit
-  (Kopieren, TXT-Download), **Sprecher umbenennen** („Sprecher A“ → „Anna“; wirkt auf
-  Transkript und neu erzeugtes Protokoll), Protokoll neu erzeugen, Sitzung löschen.
-- Gespeichert serverseitig in `data/meetings/<id>.json` (atomar wie history.json):
-  Metadaten, Segmente mit Transkript, Sprechernamen, Protokoll. **Audio wird nicht auf
-  dem Server gespeichert**; im Browser wird es nach erfolgreicher Verarbeitung gelöscht
-  (Option „Audio behalten und herunterladen“ vor dem Löschen).
+  (Kopieren, TXT-Download), **Sprecher umbenennen/zusammenführen** („Sprecher 1“ →
+  „Anna“; wirkt auf Transkript und neu erzeugtes Protokoll), Protokoll neu erzeugen,
+  Sitzung löschen. Eigener Name aus „Name der eigenen Stimme“ als Vorschlag.
+- Gespeichert in `data/meetings/<id>/meeting.json` (atomar wie history.json):
+  Metadaten, Teile, Segmente, Sprechernamen, Protokoll, Anbieter.
+- **Audio** liegt nur bis zum erfolgreichen Abschluss temporär unter
+  `data/meetings/<id>/audio/` und wird dann gelöscht (→ F1); im Browser wird die
+  IndexedDB-Kopie nach Abschluss gelöscht.
 
 ## Schnittstelle (neu)
 
-- `POST /api/meetings` → `{ id }` (Titel, Startzeit)
-- `POST /api/meetings/:id/segments` (multipart: `audio`, `index`, `startOffsetSeconds`,
-  optional `speakerReferences` als JSON mit Namen + Data-URL) → Segment-Transkript;
-  idempotent je `index`
-- `POST /api/meetings/:id/protocol` → Protokoll
-- `GET /api/meetings`, `GET /api/meetings/:id`, `PATCH /api/meetings/:id` (Titel,
-  Sprechernamen), `DELETE /api/meetings/:id`
-- `GET /api/providers`: `meetings: true`, wenn OpenAI-Schlüssel vorhanden.
+- `POST /api/meetings` `{ title?, source: "recording"|"upload", language }` → `{ id }`
+- `PUT /api/meetings/:id/parts/:part/chunks/:n` (Binärkörper ≤ 10 MB, idempotent)
+- `POST /api/meetings/:id/finish` → startet Job
+- `POST /api/meetings/:id/retry` `{ provider? }`, `POST /api/meetings/:id/protocol` (neu erzeugen)
+- `GET /api/meetings`, `GET /api/meetings/:id`, `PATCH /api/meetings/:id`
+  (Titel, Sprechernamen), `DELETE /api/meetings/:id` (inkl. Audio)
+- `GET /api/providers`: `meetings: ["mistral","assemblyai"]` (die mit Schlüssel).
+- Alt: `/api/transcribe-meeting` entfällt.
 
 ## Nicht Teil dieses Specs
 
-Echtzeit-Transkript während der Aufnahme, Hintergrundaufnahme bei gesperrtem iPhone
-(technisch nicht möglich), Sprecher per Stimmprofil über Sitzungen hinweg,
-Übersetzung des Protokolls.
+Echtzeit-Transkript während der Aufnahme, Aufnahme bei gesperrtem iPhone (technisch
+nicht möglich), Sprecher-Wiedererkennung über Sitzungen, Übersetzung des Protokolls.
 
 ## Offene Fragen
 
-- F1 Audio nach erfolgreicher Verarbeitung im Browser automatisch löschen (Vorschlag)
-  oder immer behalten bis zum manuellen Löschen?
-- F2 Protokoll automatisch nach dem letzten Segment erzeugen (Vorschlag) oder erst auf
+- F1 Audio nach erfolgreicher Verarbeitung automatisch löschen (Vorschlag; vorher
+  Download-Angebot) oder behalten bis zum manuellen Löschen?
+- F2 Protokoll automatisch nach der Transkription erzeugen (Vorschlag) oder erst auf
   Knopfdruck?
 
 ## Abnahme
 
-- A1 Backend-Tests: Segment-Upload idempotent, Validierung (Größe, Index, Format),
-  Modellwahl per Variable, diarized_json → Segmente, Sprecher-Referenzen werden
-  weitergegeben, Protokoll mit eingesetzten Namen, atomare Speicherung, Löschen.
-- A2 Frontend-Tests: Segment-Rotation (10 min), IndexedDB-Wiederherstellung nach
-  Neuladen, Unterbrechung → Fortsetzen mit Lückenmarke, Retry, Referenz-Ausschnitt als
-  WAV, Sprecher umbenennen.
+- A1 Backend-Tests (Anbieter gemockt): Stück-Upload idempotent und Reihenfolge-fest,
+  Zusammensetzen je Teil, Job-Statusfolge, Fallback Mistral → AssemblyAI, Abbildung
+  `speaker_id`/`speaker` → „Sprecher n“, `context_bias` aus Lexikon, Wiederaufnahme
+  nach Neustart, Protokoll mit eingesetzten Namen, Token-Grenzen je Aufgabe, Löschen
+  inkl. Audio, keine Schlüssel in Antworten.
+- A2 Frontend-Tests: Stücke in IndexedDB + Upload-Warteschlange mit Retry,
+  Wiederherstellung nach Neuladen, Unterbrechung → neuer Teil mit Lückenmarke,
+  Polling, Sprecher umbenennen/zusammenführen.
 - A3 `pnpm check`, `pnpm test`, `pnpm build` grün.
-- A4 Am Effekt (Mensch): 15-min-Testaufnahme am PC mit zwei Sprechern; Unterbrechung
-  auf Android und iPhone (Homescreen) → Fortsetzen; Seite neu laden während Aufnahme →
-  Wiederherstellung; danach eine echte 1–3-h-Sitzung.
+- A4 Am Effekt (Mensch): 15-min-Testaufnahme am PC mit zwei Sprechern (Mistral);
+  Fallback-Probe mit AssemblyAI; Unterbrechung auf Android und iPhone → Fortsetzen;
+  Neuladen während der Aufnahme → Wiederherstellung; danach eine echte 1–3-h-Sitzung.

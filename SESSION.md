@@ -119,7 +119,8 @@ ausstehend: Live-Abnahme durch den Menschen (A4 der Specs), danach `verification
      Leer lassen, wenn keine. -->
 
 - Freigabe Specs Etappe 3: `specs/F-006/spec.md`, `specs/F-007/spec.md`, `specs/F-006/plan.md`
-  (nur OpenAI; diarize-Modell abgekündigt zum 26.02.2027) inkl. F-006 F1/F2.
+  (v2: Mistral Voxtral Standard, AssemblyAI Fallback — Entscheidung Mensch 27.10.)
+  inkl. F-006 F1/F2. Schlüssel MISTRAL/ASSEMBLYAI liefert der Mensch.
 
 ---
 
