@@ -1295,3 +1295,10 @@ textarea {
   .meeting-page { padding: 20px 12px 140px; }
   .meeting-sessions .detail-inner { padding: 12px 0; }
 }
+
+.meeting-protocol { min-width: 0; max-width: 100%; }
+.meeting-protocol-table { max-width: 100%; overflow-x: auto; }
+.meeting-protocol-table:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.meeting-protocol-table table { width: 100%; border-collapse: collapse; font-size: 14px; color: var(--foreground); }
+.meeting-protocol-table th, .meeting-protocol-table td { min-width: 8rem; padding: 6px 10px; border: 1px solid var(--border); vertical-align: top; }
+.meeting-protocol-table th { background: var(--muted); font-weight: 600; }

@@ -77,7 +77,7 @@ Lauf 3b (Icon, Anbieter-Listen, Markdown) fertig und live; nächster Schritt Abn
 - [ ] F-015 Claude als Anbieter: Spec `specs/F-015/spec.md` freigegeben 27.10., umgesetzt und live (inkl.
   Runtime-Abhängigkeit `@anthropic-ai/sdk`). Schlüssel OPENAI (neu) und ANTHROPIC in `.env` (Mensch, 27.10.), beide live gültig.
   Live-Probe (Lead): Diktat formal, Übersetzung HR, Zusammenfassung mit `claude-sonnet-5-5` ok; STT mit Claude → 400.
-  Befund: Claude liefert Markdown-Tabellen; `components/Markdown.tsx` kann keine Tabellen → nachrüsten.
+  Markdown-Tabellen in `components/Markdown.tsx` nachgerüstet (27.10.).
 - [ ] Lauf 4 Abnahme mit dem Menschen (PC/Android/iPhone), `verification.md`.
 - [x] Lauf 3b (27.10.): Original-Icon + Anbieter-Listen nur mit Schlüssel, ungültige markieren
   (`specs/changes/2026-10-27-icon-anbieter.md`, freigegeben 27.10.). Dazu Befund Lauf 3: Protokoll zeigt
