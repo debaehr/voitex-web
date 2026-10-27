@@ -58,6 +58,13 @@ ausstehend: Live-Abnahme durch den Menschen (A4 der Specs), danach `verification
 <!-- Geordnet nach Priorität. Erledigtes abhaken, nicht löschen,
      bis es nach DECISIONS_LOG.md archiviert wird. -->
 
+- [ ] Befunde aus der Live-Abnahme Etappe 2 (Mensch, 27.10.2026), noch nicht umgesetzt:
+  - Menü umbenennen: „Protokoll“ → „Meetings“ (Live-Aufnahme), „Meetings“ → „Transkript“
+    (Datei-Upload). Betrifft `apps/frontend/src/lib/nav.ts`, Seitentitel, Texte.
+  - „Aufnahme starten“ unter Protokoll ohne Funktion — erwartet, Langzeitaufnahme (F-006)
+    ist Etappe 3; bis dahin Knopf deaktivieren oder klar als „folgt“ kennzeichnen.
+  - Hinweisbox oben im Diktat entfernen (`apps/frontend/src/views/DictationView.tsx:21-25`).
+  - Sprachwahl im Overlay: Antwort gegeben (siehe Chat 27.10.); Entscheidung offen, §6.
 - [ ] Etappe 2: F-005 Diktat (Mikrofon, Pegel, `/api/transcribe` + `/api/process`,
   Zwischenablage, Verlauf), F-008–F-011 an Backend anbinden.
 - [ ] `apps/backend/.env` anlegen — nur der OpenAI-Schlüssel wird aus V2T übernommen.
@@ -101,7 +108,7 @@ ausstehend: Live-Abnahme durch den Menschen (A4 der Specs), danach `verification
 <!-- Echte Blocker, die ein Agent nicht selbst entscheiden darf.
      Leer lassen, wenn keine. -->
 
-- —
+- Sprachwahl im Overlay behalten, auf „Auto“ als Standard stellen oder entfernen?
 
 ---
 
