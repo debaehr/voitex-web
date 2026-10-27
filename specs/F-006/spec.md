@@ -101,6 +101,9 @@ nicht möglich), Sprecher-Wiedererkennung über Sitzungen, Übersetzung des Prot
 - F1 Audio wird nach erfolgreicher Verarbeitung automatisch gelöscht; vorher bietet die
   Ergebnisansicht „Audio herunterladen“ an (Server-Kopie bis zur Löschung abrufbar,
   `GET /api/meetings/:id/audio`, je Teil). Mensch, 27.10.2026.
+  Umsetzung: Audio bleibt nach `done` noch **24 h** erhalten; die Ergebnisansicht zeigt
+  „Audio herunterladen (wird am … gelöscht)“ und „Jetzt löschen“. Danach löscht der
+  Server es automatisch (Prüfung beim Start und stündlich).
 - F2 Protokoll wird automatisch nach der Transkription erzeugt. Mensch, 27.10.2026.
 
 ## Abnahme
