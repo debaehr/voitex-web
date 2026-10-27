@@ -1,6 +1,6 @@
 # SESSION STATE — voitex-web
 
-> **Letztes Update:** 271026_1135 · **von:** Claude Opus 5.5
+> **Letztes Update:** 271026_1150 · **von:** Claude Opus 5.5
 > **Branch:** main · **Node:** tool-01
 
 <!--
@@ -78,7 +78,7 @@ Lauf 3b (Icon, Anbieter-Listen, Markdown) fertig und live; nächster Schritt Abn
   Runtime-Abhängigkeit `@anthropic-ai/sdk`). Schlüssel OPENAI (neu) und ANTHROPIC in `.env` (Mensch, 27.10.), beide live gültig.
   Live-Probe (Lead): Diktat formal, Übersetzung HR, Zusammenfassung mit `claude-sonnet-5-5` ok; STT mit Claude → 400.
   Markdown-Tabellen in `components/Markdown.tsx` nachgerüstet (27.10.).
-- [ ] Lauf 4 Abnahme mit dem Menschen (PC/Android/iPhone), `verification.md`.
+- [ ] Lauf 4 Abnahme läuft: PC-Test 1 ok (27.10.); Mensch testet die Webversion ausgiebig. Stand in `specs/F-006/verification.md`.
 - [x] Lauf 3b (27.10.): Original-Icon + Anbieter-Listen nur mit Schlüssel, ungültige markieren
   (`specs/changes/2026-10-27-icon-anbieter.md`, freigegeben 27.10.). Dazu Befund Lauf 3: Protokoll zeigt
   rohes Markdown (`#`, `**`) → sicher als Überschriften/Fett/Listen darstellen.
