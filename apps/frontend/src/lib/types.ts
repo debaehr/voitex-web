@@ -8,7 +8,7 @@ export const settingModes = [
   "summary",
 ] as const;
 export type SettingMode = (typeof settingModes)[number];
-export type Provider = "openai" | "mistral" | "groq";
+export type Provider = "openai" | "mistral" | "groq" | "anthropic";
 export type BuiltinMode = "original" | "casual" | "formal" | "coding";
 export interface CustomMode {
   id: string;

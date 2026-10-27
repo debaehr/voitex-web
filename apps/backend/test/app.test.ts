@@ -222,3 +222,21 @@ describe("history", () => {
     expect(await (await request("/api/history")).json()).toEqual([]);
   });
 });
+
+it("offers Claude only for text and validates its settings without changing the format", async () => {
+  for (const key of ["OPENAI_API_KEY", "MISTRAL_API_KEY", "GROQ_API_KEY", "ASSEMBLYAI_API_KEY"]) vi.stubEnv(key, "");
+  vi.stubEnv("ANTHROPIC_API_KEY", "secret-anthropic");
+  const request = await start();
+  keyStatus.record("anthropic", 401);
+  const response = await (await request("/api/providers")).json();
+  expect(response).toEqual({ llm: ["anthropic"], stt: [], meetings: [], invalid: ["anthropic"] });
+  expect(JSON.stringify(response)).not.toContain("secret-anthropic");
+  keyStatus.record("anthropic", 200);
+  const body = { ...settings(), providers: Object.fromEntries(modes.map(mode => [mode, "anthropic"])),
+    customModes: [{ id: "custom-12345678-1234-1234-1234-123456789abc", label: "Custom", prompt: "Custom", provider: "anthropic" }] };
+  expect((await request("/api/settings", "PUT", body)).status).toBe(200);
+  expect(await (await request("/api/settings")).json()).toEqual(body);
+  expect((await request("/api/settings", "PUT", { ...body, providers: { ...body.providers, meetings: "anthropic" } })).status).toBe(400);
+  vi.stubEnv("ANTHROPIC_API_KEY", "");
+  expect((await (await request("/api/providers")).json()).llm).toEqual([]);
+});

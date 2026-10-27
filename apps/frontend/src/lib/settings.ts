@@ -16,7 +16,7 @@ export function mergeWithDefaults(
     const provider = isRecord(partial.providers)
       ? partial.providers[mode]
       : undefined;
-    if (provider === "openai" || provider === "mistral" || provider === "groq")
+    if (provider === "openai" || provider === "mistral" || provider === "groq" || provider === "anthropic")
       result.providers[mode] = provider;
     const prompt = isRecord(partial.prompts)
       ? partial.prompts[mode]

@@ -116,3 +116,24 @@ it("uses the starting target while transcription is in flight", async () => {
   expect((await pending).targetLanguage).toBe("hr");
   expect(api.process).toHaveBeenCalledWith(expect.objectContaining({ targetLanguage: "hr" }));
 });
+
+it.each([{ sttProviders: ["mistral", "openai"] }, { sttProviders: ["openai"] }])("uses available STT $sttProviders for Claude modes and preserves result model", async ({ sttProviders }) => {
+  const api = fake();
+  api.process.mockResolvedValue({ processed: "Final", provider: "Claude", model: "actual-model" });
+  const result = await runDictation({ audio: new Blob(), durationSeconds: 1, mode: "formal", language: "de", targetLanguage: "hr",
+    settings: { ...settings, providers: { ...settings.providers, formal: "anthropic" } }, sttProviders, api });
+  const provider = sttProviders.includes("mistral") ? "mistral" : "openai";
+  expect(api.transcribe).toHaveBeenCalledWith(expect.objectContaining({ provider }));
+  expect(api.process).toHaveBeenCalledWith(expect.objectContaining({ provider: "anthropic", targetLanguage: "hr" }));
+  expect(result.provider).toBe("Claude · actual-model");
+});
+it("uses Claude for custom modes and snippet translation", async () => {
+  const api = fake();
+  api.transcribe.mockResolvedValue({ transcript: "foitex", provider: "Mistral" });
+  api.translate.mockResolvedValue({ translated: "Translated", provider: "Claude", model: "fallback-model" });
+  const result = await runDictation({ audio: new Blob(), durationSeconds: 1, mode: "custom-test", language: "de", targetLanguage: "en",
+    settings: { ...settings, customModes: [{ id: "custom-test", label: "Custom", prompt: "Custom", provider: "anthropic" }] }, sttProviders: ["mistral"], api });
+  expect(api.transcribe).toHaveBeenCalledWith(expect.objectContaining({ provider: "mistral", mode: "original" }));
+  expect(api.translate).toHaveBeenCalledWith(expect.objectContaining({ provider: "anthropic" }));
+  expect(result.provider).toBe("Claude · fallback-model");
+});

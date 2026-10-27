@@ -20,7 +20,7 @@ import {
 import type { ThemePreference } from "../lib/theme";
 import { SettingsNotice, useSettings } from "../lib/settings-context";
 import { isDirty } from "../lib/settings";
-import { addCustomMode, availableDictationModes, customModeErrors, deleteMode, hasModeErrors, restoreBuiltinModes, updateCustomMode } from "../lib/modes";
+import { dictationSttProvider, addCustomMode, availableDictationModes, customModeErrors, deleteMode, hasModeErrors, restoreBuiltinModes, updateCustomMode } from "../lib/modes";
 import type { CustomMode, Provider, Settings } from "../lib/types";
 const entries = [
   { id: "providers", title: "Anbieter" },
@@ -265,6 +265,8 @@ export function SettingsView({
                     <Field
                       key={mode.id}
                       label={mode.label || "Neuer Modus"}
+                      hint={mode.provider === "anthropic" && available.some(item => item.id === mode.id)
+                        ? `Spracherkennung über ${dictationSttProvider(mode.provider, providers?.stt) === "mistral" ? "Mistral" : "OpenAI"}` : undefined}
                       htmlFor={`provider-${mode.id}`}
                     >
                       <Select

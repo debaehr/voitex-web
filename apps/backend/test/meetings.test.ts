@@ -452,3 +452,15 @@ it.each([undefined, false, true, null, "false", 1])("validates additive meetingF
   expect(response.status).toBe(meetingFallback === undefined || typeof meetingFallback === "boolean" ? 200 : 400);
   if (response.ok) { expect(await (await request("/settings")).json()).toEqual(settings); expect(settings.version).toBe(1); }
 });
+
+it.each(["recording", "upload"])("routes %s text generation to Claude while keeping meeting STT separate", async source => {
+  await saveSettings({ protocol: "anthropic", summary: "anthropic", meetings: "mistral" });
+  processTranscript.mockResolvedValue({ text: "Claude protocol", provider: "Claude", model: "fallback-model" });
+  const { create, chunk, finish, request, service } = await start();
+  const id = await create(source); await chunk(id); await finish(id);
+  expect((await request(`/meetings/${id}/protocol`, "POST")).status).toBe(202); await service.idle();
+  const task = source === "recording" ? "protocol" : "summary";
+  expect(processTranscript).toHaveBeenCalledWith("anthropic", expect.objectContaining({ task, instructions: `Custom ${task}` }));
+  expect(transcribeMeeting).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ provider: "mistral" }));
+  expect(await service.get(id)).toMatchObject({ status: "done", protocol: "Claude protocol", protocolProvider: "Claude", protocolModel: "fallback-model" });
+});

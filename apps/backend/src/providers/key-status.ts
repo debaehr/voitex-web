@@ -1,6 +1,7 @@
-export const providerIds = ["openai", "mistral", "groq", "assemblyai"] as const;
+export const providerIds = ["openai", "mistral", "groq", "assemblyai", "anthropic"] as const;
 export type ProviderId = typeof providerIds[number];
 const endpoints: Record<ProviderId, string> = {
+  anthropic: "https://api.anthropic.com/v1/models",
   openai: "https://api.openai.com/v1/models",
   mistral: "https://api.mistral.ai/v1/models",
   groq: "https://api.groq.com/openai/v1/models",
@@ -49,7 +50,7 @@ export class KeyStatus {
       timeout.unref?.();
       try {
         const response = await (this.options.fetch ?? fetch)(endpoints[id], {
-          headers: { Authorization: id === "assemblyai" ? state.key : `Bearer ${state.key}` }, signal: controller.signal
+          headers: id === "anthropic" ? { "x-api-key": state.key, "anthropic-version": "2023-06-01" } : { Authorization: id === "assemblyai" ? state.key : `Bearer ${state.key}` }, signal: controller.signal
         });
         // A newer real request or changed key must win over a stale background check.
         if (this.state(id) === state && state.revision === revision) this.record(id, response.status);

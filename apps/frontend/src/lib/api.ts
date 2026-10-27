@@ -77,7 +77,7 @@ export const api = {
     return request<{ transcript: string; provider: string }>("/transcribe", { method: "POST", body: form });
   },
   process: (input: ProcessingRequest) =>
-    request<{ processed: string; provider: string }>("/process", json("POST", input)),
+    request<{ processed: string; provider: string; model: string | null }>("/process", json("POST", input)),
   translate: (input: TranslationRequest) =>
     request<{ translated: string; provider: string; model: string | null }>("/translate", json("POST", input)),
   getProviders: () => request<Providers>("/providers"),

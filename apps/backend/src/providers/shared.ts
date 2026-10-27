@@ -1,7 +1,7 @@
 import { recordProviderResponse } from "./key-status.js";
 
 export type WorkMode = "original" | "casual" | "formal" | "coding";
-export type AiProvider = "openai" | "mistral" | "groq";
+export type AiProvider = "openai" | "mistral" | "groq" | "anthropic";
 
 export type TranscribeInput = {
   buffer: Buffer;

@@ -59,3 +59,28 @@ it("handles empty input, CRLF, adjacent blocks and unmatched asterisks", () => {
   const html = renderToStaticMarkup(<Markdown text={"# Titel\r\nText **offen\r\n- Punkt\r\n3. Aufgabe\r\nAbsatz"} />);
   expect(html).toContain('<h1>Titel</h1><p>Text **offen</p><ul><li>Punkt</li></ul><ol start="3"><li>Aufgabe</li></ol><p>Absatz</p>');
 });
+
+it.each([{ stt: ["mistral"] }, { stt: ["openai"] }])("shows Claude only in text lists and the actual STT hint for $stt", ({ stt }) => {
+  vi.stubGlobal("window", { matchMedia: () => ({ matches: false }) });
+  const modes = { original: "anthropic", casual: "anthropic", formal: "anthropic", coding: "anthropic", protocol: "anthropic", summary: "anthropic" } as const;
+  const settings: Settings = { version: 1, providers: { ...modes, meetings: "mistral" }, prompts: { ...modes }, lexicon: [], snippets: [], ownSpeakerName: "Ich",
+    customModes: [{ id: "custom-test", label: "Custom", prompt: "Custom", provider: "anthropic" }] };
+  context.current = { settings, defaults: settings, providers: { stt, llm: ["mistral", "anthropic"], meetings: ["mistral"] }, status: "ready", saving: false, save: vi.fn() };
+  const html = renderToStaticMarkup(<SettingsView theme="light" onThemeChange={() => {}} onDirtyChange={() => {}} />);
+  expect(html.match(/Spracherkennung über /g)).toHaveLength(5);
+  expect(html).toContain(`Spracherkennung über ${stt.includes("mistral") ? "Mistral" : "OpenAI"}`);
+  for (const id of [...Object.keys(modes), "custom-test", "meetings"]) {
+    const row = html.match(new RegExp(`<select[^>]*id="provider-${id}"[^>]*>([^]*?)</select>`))?.[1];
+    if (id === "meetings") expect(row).not.toContain("Claude");
+    else expect(row).toContain('value="anthropic" selected="">Claude');
+  }
+});
+
+it("keeps Claude text providers when merging saved settings with defaults", async () => {
+  const { mergeWithDefaults } = await import("../src/lib/settings");
+  const modes = { original: "mistral", casual: "mistral", formal: "mistral", coding: "mistral", protocol: "mistral", summary: "mistral" } as const;
+  const defaults: Settings = { version: 1, providers: { ...modes, meetings: "mistral" }, prompts: { ...modes }, lexicon: [], snippets: [], ownSpeakerName: "Ich" };
+  const providers = Object.fromEntries(Object.keys(modes).map(mode => [mode, "anthropic"]));
+  const merged = mergeWithDefaults({ providers: { ...providers, meetings: "anthropic" } }, defaults);
+  expect(merged.providers).toEqual({ ...providers, meetings: "mistral" });
+});

@@ -1,3 +1,4 @@
+import { ClaudeProviderError } from "./providers/anthropic.js";
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, open, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -404,7 +405,7 @@ export class MeetingService {
             current.providerAttempts ??= [];
             current.providerAttempts.push(...error.attempts);
           }
-          current.error = error instanceof MeetingTranscriptionError ? error.message : error instanceof MeetingError ? error.message : phase === "transcribe" ? "Meeting transcription failed." : "Meeting protocol generation failed.";
+          current.error = error instanceof MeetingTranscriptionError ? error.message : error instanceof MeetingError || error instanceof ClaudeProviderError ? error.message : phase === "transcribe" ? "Meeting transcription failed." : "Meeting protocol generation failed.";
         });
       } catch (failure) { if (!(failure instanceof MeetingError && failure.status === 404)) throw failure; }
     }

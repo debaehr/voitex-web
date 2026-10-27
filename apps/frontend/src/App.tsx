@@ -40,7 +40,7 @@ export function App() {
 }
 
 function AppContent() {
-  const { saving, settings, status: settingsStatus } = useSettings();
+  const { saving, settings, providers, status: settingsStatus } = useSettings();
   const history = useHistory();
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [pendingSection, setPendingSection] = useState<Section | null>(null);
@@ -89,7 +89,7 @@ function AppContent() {
     }
     if (!microphone.acquire("dictation")) return;
     locked.current = true;
-    recordingOptions.current = snapshotDictationOptions({ mode: activeMode, language, targetLanguage, settings });
+    recordingOptions.current = snapshotDictationOptions({ mode: activeMode, language, targetLanguage, settings, sttProviders: providers?.stt });
     setMessage(null);
     setBusyText("Mikrofon wird gestartet …");
     try {

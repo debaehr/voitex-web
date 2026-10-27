@@ -1,3 +1,4 @@
+import { ClaudeProviderError } from "../providers/anthropic.js";
 import { keyStatus } from "../providers/key-status.js";
 import { Request, Response, Router } from "express";
 import { join } from "node:path";
@@ -35,7 +36,7 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
     const configured = ["openai", "mistral", "groq"].filter(provider =>
       Boolean(process.env[`${provider.toUpperCase()}_API_KEY`]?.trim())
     );
-    res.json({ stt: configured, llm: configured, meetings: availableMeetingProviders(), invalid: keyStatus.invalid() });
+    res.json({ stt: configured, llm: [...configured, ...(process.env.ANTHROPIC_API_KEY?.trim() ? ["anthropic"] : [])], meetings: availableMeetingProviders(), invalid: keyStatus.invalid() });
   });
 
   apiRouter.get("/settings/defaults", (_req, res) => {
@@ -101,7 +102,7 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
     }
 
     const provider = req.body?.provider || "mistral";
-    if (!isProvider(provider)) {
+    if (!isProvider(provider) || provider === "anthropic") {
       sendError(res, 400, "Invalid provider.");
       return;
     }
@@ -160,8 +161,8 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
       });
       res.json({ translated: result.text, provider: result.provider, model: result.model });
     } catch (error) {
-      console.error("Translation failed", error);
-      sendInternalError(res, "Translation failed.");
+      console.error("Translation failed", error instanceof ClaudeProviderError ? error.message : error);
+      sendInternalError(res, error instanceof ClaudeProviderError ? error.message : "Translation failed.");
     }
   }
 
@@ -196,8 +197,8 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
       const result = await processTranscript(provider, { transcript, mode, instructions, translateToEnglish, targetLanguage });
       res.json({ processed: result.text, provider: result.provider, model: result.model });
     } catch (error) {
-      console.error("Processing failed", error);
-      sendInternalError(res, "Processing failed.");
+      console.error("Processing failed", error instanceof ClaudeProviderError ? error.message : error);
+      sendInternalError(res, error instanceof ClaudeProviderError ? error.message : "Processing failed.");
     }
   }
 

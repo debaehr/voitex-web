@@ -3,11 +3,11 @@ import type { HistoryEntry, Provider, Settings } from "./types";
 import { applyLexicon, lexiconPromptTerms } from "./lexicon";
 import { matchSnippet } from "./snippets";
 import { isLongEnough } from "./recorder";
-import { availableDictationModes } from "./modes";
+import { availableDictationModes, dictationSttProvider } from "./modes";
 import type { BuiltinMode } from "./types";
 export type DictationMode = HistoryEntry["mode"];
 export interface TranscriptionRequest {
-  audio: Blob; mode: BuiltinMode; provider: Provider; language: string; prompt?: string;
+  audio: Blob; mode: BuiltinMode; provider: Exclude<Provider, "anthropic">; language: string; prompt?: string;
 }
 export interface ProcessingRequest {
   transcript: string; mode: BuiltinMode; provider: Provider; instructions: string; targetLanguage?: TargetLanguage;
@@ -18,7 +18,7 @@ export interface TranslationRequest {
 export interface DictationApi {
   translate: (input: TranslationRequest) => Promise<{ translated: string; provider: string; model: string | null }>;
   transcribe: (input: TranscriptionRequest) => Promise<{ transcript: string; provider: string }>;
-  process: (input: ProcessingRequest) => Promise<{ processed: string; provider: string }>;
+  process: (input: ProcessingRequest) => Promise<{ processed: string; provider: string; model?: string | null }>;
 }
 export type DictationResult = Omit<HistoryEntry, "id" | "createdAt"> & { modeLabel: string };
 export interface DictationOptions {
@@ -26,12 +26,14 @@ export interface DictationOptions {
   language: string;
   targetLanguage: TargetLanguage;
   settings: Settings;
+  sttProviders?: readonly string[];
 }
 export function snapshotDictationOptions(options: DictationOptions): DictationOptions {
   return structuredClone(options);
 }
-export async function runDictation({ audio, durationSeconds, mode, language, targetLanguage = "source", settings, api, onStage }: {
+export async function runDictation({ audio, durationSeconds, mode, language, targetLanguage = "source", settings, sttProviders, api, onStage }: {
   audio: Blob; durationSeconds: number; mode: DictationMode; language: string; targetLanguage?: TargetLanguage; settings: Settings;
+  sttProviders?: readonly string[];
   api: DictationApi; onStage?: (stage: string) => void;
 }): Promise<DictationResult> {
   if (!isLongEnough(durationSeconds)) throw new Error("Aufnahme zu kurz");
@@ -40,9 +42,10 @@ export async function runDictation({ audio, durationSeconds, mode, language, tar
   const { provider, prompt: instructions, label: modeLabel } = selected;
   const requestMode = selected.builtin ?? "original";
   onStage?.("Transkribiere …");
+  const sttProvider = dictationSttProvider(provider, sttProviders);
   const transcript = await api.transcribe({
-    audio, mode: requestMode, provider, language,
-    ...(provider === "openai" ? { prompt: lexiconPromptTerms(settings.lexicon).join(", ").slice(0, 1000) } : {}),
+    audio, mode: requestMode, provider: sttProvider, language,
+    ...(sttProvider === "openai" ? { prompt: lexiconPromptTerms(settings.lexicon).join(", ").slice(0, 1000) } : {}),
   });
   const raw = transcript.transcript;
   if (!raw.trim()) throw new Error("Kein verwertbarer Text erkannt — bitte erneut versuchen.");
@@ -54,10 +57,14 @@ export async function runDictation({ audio, durationSeconds, mode, language, tar
     onStage?.("Übersetze …");
     const translated = await api.translate({ text: snippet.text, targetLanguage, provider });
     if (!translated.translated.trim()) throw new Error("Kein verwertbarer Text erkannt — bitte erneut versuchen.");
-    return { ...metadata, text: translated.translated, provider: translated.provider };
+    return { ...metadata, text: translated.translated, provider: resultProvider(translated) };
   }
   onStage?.("Bearbeite …");
   const processed = await api.process({ transcript: corrected, mode: requestMode, provider, instructions, targetLanguage });
   if (!processed.processed.trim()) throw new Error("Kein verwertbarer Text erkannt — bitte erneut versuchen.");
-  return { ...metadata, text: processed.processed, provider: processed.provider };
+  return { ...metadata, text: processed.processed, provider: resultProvider(processed) };
+}
+
+function resultProvider(result: { provider: string; model?: string | null }): string {
+  return result.provider === "Claude" && result.model ? `${result.provider} · ${result.model}` : result.provider;
 }

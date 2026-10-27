@@ -1,6 +1,6 @@
 # SESSION STATE — voitex-web
 
-> **Letztes Update:** 271026_1110 · **von:** Claude Opus 5.5
+> **Letztes Update:** 271026_1135 · **von:** Claude Opus 5.5
 > **Branch:** main · **Node:** tool-01
 
 <!--
@@ -74,8 +74,10 @@ Lauf 3b (Icon, Anbieter-Listen, Markdown) fertig und live; nächster Schritt Abn
   Ergebnisansicht nach `done` ist nur Klartext (`components/MeetingRecordingResult.tsx`) → Lauf 3.
 - [x] Lauf 2b Backend F-014/v3 + AssemblyAI-Fix (27.10.), Probe in `specs/F-006/plan.md`.
 - [x] Lauf 3 (27.10.): `components/MeetingDetail.tsx`, `MeetingSessions.tsx`, `lib/meeting-file-upload.ts`; 162 Frontend-Tests.
-- [ ] F-015 Claude als Anbieter: Spec `specs/F-015/spec.md` freigegeben 27.10., Lauf läuft (inkl.
+- [ ] F-015 Claude als Anbieter: Spec `specs/F-015/spec.md` freigegeben 27.10., umgesetzt und live (inkl.
   Runtime-Abhängigkeit `@anthropic-ai/sdk`). Schlüssel OPENAI (neu) und ANTHROPIC in `.env` (Mensch, 27.10.), beide live gültig.
+  Live-Probe (Lead): Diktat formal, Übersetzung HR, Zusammenfassung mit `claude-sonnet-5-5` ok; STT mit Claude → 400.
+  Befund: Claude liefert Markdown-Tabellen; `components/Markdown.tsx` kann keine Tabellen → nachrüsten.
 - [ ] Lauf 4 Abnahme mit dem Menschen (PC/Android/iPhone), `verification.md`.
 - [x] Lauf 3b (27.10.): Original-Icon + Anbieter-Listen nur mit Schlüssel, ungültige markieren
   (`specs/changes/2026-10-27-icon-anbieter.md`, freigegeben 27.10.). Dazu Befund Lauf 3: Protokoll zeigt

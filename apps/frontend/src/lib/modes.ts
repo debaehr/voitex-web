@@ -74,3 +74,8 @@ export function hasModeErrors(settings: Settings): boolean {
   return modes.length > 20 || availableDictationModes(settings).length === 0 ||
     modes.some(mode => Object.keys(customModeErrors(mode, modes)).length > 0);
 }
+
+// Claude handles text only; use the same STT choice in settings and recording.
+export function dictationSttProvider(provider: Provider, available: readonly string[] = ["mistral"]): Exclude<Provider, "anthropic"> {
+  return provider === "anthropic" ? (available.includes("mistral") ? "mistral" : "openai") : provider;
+}
