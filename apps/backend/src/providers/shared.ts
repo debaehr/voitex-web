@@ -1,3 +1,5 @@
+import { recordProviderResponse } from "./key-status.js";
+
 export type WorkMode = "original" | "casual" | "formal" | "coding";
 export type AiProvider = "openai" | "mistral" | "groq";
 
@@ -60,6 +62,7 @@ export async function postJson<T>(url: string, apiKey: string, body: unknown): P
     body: JSON.stringify(body)
   });
 
+  recordProviderResponse(url, response.status);
   return readResponse<T>(response);
 }
 
@@ -72,6 +75,7 @@ export async function postMultipart<T>(url: string, apiKey: string, formData: Fo
     body: formData
   });
 
+  recordProviderResponse(url, response.status);
   return readResponse<T>(response);
 }
 

@@ -50,6 +50,7 @@ export interface HistoryEntry {
   targetLanguage?: TargetLanguage;
 }
 export interface Providers {
+  invalid?: string[];
   stt: string[];
   llm: string[];
   meetings: Array<"mistral" | "assemblyai">;

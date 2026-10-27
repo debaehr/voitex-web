@@ -1,6 +1,6 @@
 # SESSION STATE — voitex-web
 
-> **Letztes Update:** 271026_1035 · **von:** Claude Opus 5.5
+> **Letztes Update:** 271026_1050 · **von:** Claude Opus 5.5
 > **Branch:** main · **Node:** tool-01
 
 <!--
@@ -23,7 +23,7 @@ Etappe 3: F-006 Meetings-Aufnahme, F-007 Transkript-Upload. Plan `specs/F-006/pl
 Dazu F-014 Mistral als Standard (Datenschutz) und F-006 v3 (Sprecher zuordnen vor dem
 Protokoll), beide freigegeben 27.10. Lauf 1, 1b, 2 (Frontend Aufnahme) und 2b (Backend F-014 + v3) fertig und live;
 Lauf 3 (Frontend Ergebnis, Sprecher zuordnen, Upload, Einstellungen) fertig und live;
-nächster Schritt Lauf 3b (Icon, Anbieter-Listen, Markdown-Darstellung), dann Abnahme (Lauf 4).
+Lauf 3b (Icon, Anbieter-Listen, Markdown) fertig und live; nächster Schritt Abnahme (Lauf 4) mit dem Menschen.
 
 ---
 
@@ -75,7 +75,7 @@ nächster Schritt Lauf 3b (Icon, Anbieter-Listen, Markdown-Darstellung), dann Ab
 - [x] Lauf 2b Backend F-014/v3 + AssemblyAI-Fix (27.10.), Probe in `specs/F-006/plan.md`.
 - [x] Lauf 3 (27.10.): `components/MeetingDetail.tsx`, `MeetingSessions.tsx`, `lib/meeting-file-upload.ts`; 162 Frontend-Tests.
 - [ ] Lauf 4 Abnahme mit dem Menschen (PC/Android/iPhone), `verification.md`.
-- [ ] Danach Lauf 3b: Original-Icon + Anbieter-Listen nur mit Schlüssel, ungültige markieren
+- [x] Lauf 3b (27.10.): Original-Icon + Anbieter-Listen nur mit Schlüssel, ungültige markieren
   (`specs/changes/2026-10-27-icon-anbieter.md`, freigegeben 27.10.). Dazu Befund Lauf 3: Protokoll zeigt
   rohes Markdown (`#`, `**`) → sicher als Überschriften/Fett/Listen darstellen.
 - [x] `settings.json` auf Mistral umgestellt (Lead, 27.10.; Sicherung `~/backup/voitex-web-data-*`).

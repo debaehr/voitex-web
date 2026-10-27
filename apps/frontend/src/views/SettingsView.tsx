@@ -1,3 +1,4 @@
+import { ProviderOptions } from "../components/ProviderOptions";
 import { useEffect, useState } from "react";
 import { TwoLevel } from "../components/TwoLevel";
 import { ConfirmDialog } from "../components/Dialog";
@@ -30,11 +31,6 @@ const nonDictationModes = [
   { id: "protocol", label: "Protokoll" },
   { id: "summary", label: "Zusammenfassung" },
 ] as const;
-const providerLabels: Record<string, string> = {
-  openai: "OpenAI",
-  mistral: "Mistral",
-  groq: "Groq",
-};
 interface SettingsViewProps {
   theme: ThemePreference;
   onThemeChange: (value: ThemePreference) => void;
@@ -90,15 +86,6 @@ export function SettingsView({
       );
     }
   }
-  const options = [
-    ...new Set([
-      "openai",
-      "mistral",
-      "groq",
-      ...(providers?.llm ?? []),
-      ...Object.entries(draft?.providers ?? {}).filter(([key]) => key !== "meetings").map(([, value]) => value),
-    ]),
-  ];
   function changeProvider(id: string, provider: Provider) {
     if (!draft) return;
     update(draft.customModes?.some(mode => mode.id === id)
@@ -268,9 +255,7 @@ export function SettingsView({
                   <Field label="Meetings" htmlFor="provider-meetings">
                     <Select id="provider-meetings" value={draft.providers.meetings ?? "mistral"}
                       onChange={event => update({ ...draft, providers: { ...draft.providers, meetings: event.target.value as "mistral" | "assemblyai" } })}>
-                      {(["mistral", "assemblyai"] as const).map(provider => <option key={provider} value={provider} disabled={!providers?.meetings?.includes(provider)}>
-                        {provider === "mistral" ? "Mistral" : "AssemblyAI"}{providers?.meetings?.includes(provider) ? "" : " (kein Schlüssel)"}
-                      </option>)}
+                      <ProviderOptions available={providers?.meetings ?? []} invalid={providers?.invalid} selected={draft.providers.meetings ?? "mistral"} />
                     </Select>
                   </Field>
                   <SettingRow title="Bei Fehler auf AssemblyAI ausweichen" description="Audio geht dann an einen US-Anbieter."
@@ -289,18 +274,7 @@ export function SettingsView({
                           changeProvider(mode.id, event.target.value as Provider)
                         }
                       >
-                        {options.map((provider) => (
-                          <option
-                            key={provider}
-                            value={provider}
-                            disabled={!providers?.llm.includes(provider)}
-                          >
-                            {providerLabels[provider] ?? provider}
-                            {providers?.llm.includes(provider)
-                              ? ""
-                              : " (kein Schlüssel)"}
-                          </option>
-                        ))}
+                        <ProviderOptions available={providers?.llm ?? []} invalid={providers?.invalid} selected={mode.provider} />
                       </Select>
                     </Field>
                   ))}

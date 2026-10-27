@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Markdown } from "./Markdown";
 import { Play } from "lucide-react";
 import { api } from "../lib/api";
 import { downloadFile } from "../lib/download";
@@ -144,7 +145,7 @@ export function MeetingDetail({ id, ownSpeakerName, initial, onChanged, onDelete
       {meeting.status === "done" && <Card><CardHeader><CardTitle>Protokoll</CardTitle></CardHeader><CardContent>
         <div className="row wrap"><Button variant="outline" onClick={() => void copy(meeting.protocol)}>Protokoll kopieren</Button><Button variant="outline" onClick={() => downloadFile(`${meeting.title || "Sitzung"}.md`, meeting.protocol, "text/markdown;charset=utf-8")}>Markdown herunterladen</Button>
           {!editing && <Button variant="ghost" onClick={() => setEditing(true)}>Sprecher umbenennen</Button>}</div>
-        <pre className="meeting-protocol">{meeting.protocol}</pre>
+        <Markdown text={meeting.protocol} />
       </CardContent></Card>}
       {!!meeting.segments.length && <Card><CardHeader><CardTitle>Transkript</CardTitle></CardHeader><CardContent>
         <div className="row wrap"><Button variant="outline" onClick={() => void copy(transcript)}>Transkript kopieren</Button><Button variant="outline" onClick={() => downloadFile(`${meeting.title || "Sitzung"}.txt`, transcript, "text/plain;charset=utf-8")}>TXT herunterladen</Button></div>

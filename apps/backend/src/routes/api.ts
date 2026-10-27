@@ -1,3 +1,4 @@
+import { keyStatus } from "../providers/key-status.js";
 import { Request, Response, Router } from "express";
 import { join } from "node:path";
 import multer from "multer";
@@ -34,7 +35,7 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
     const configured = ["openai", "mistral", "groq"].filter(provider =>
       Boolean(process.env[`${provider.toUpperCase()}_API_KEY`]?.trim())
     );
-    res.json({ stt: configured, llm: configured, meetings: availableMeetingProviders() });
+    res.json({ stt: configured, llm: configured, meetings: availableMeetingProviders(), invalid: keyStatus.invalid() });
   });
 
   apiRouter.get("/settings/defaults", (_req, res) => {

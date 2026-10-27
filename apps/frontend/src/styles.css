@@ -1250,7 +1250,7 @@ textarea {
 .meeting-upload { gap: 6px; font-variant-numeric: tabular-nums; }
 .meeting-page progress { width: 100%; height: 8px; accent-color: var(--primary); }
 .meeting-actions .btn { min-height: 44px; height: auto; padding-block: 8px; max-width: 100%; white-space: normal; }
-.meeting-protocol { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.meeting-protocol { margin: 0; overflow-wrap: anywhere; font: inherit; }
 .overlay-dot:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 @media (max-width: 767px) {
   .meeting-page input { font-size: 16px; }
@@ -1267,7 +1267,17 @@ textarea {
 .meeting-detail .row.wrap > .btn { white-space: normal; height: auto; min-height: 36px; }
 .meeting-detail audio, .meeting-page progress { width: 100%; max-width: 100%; }
 .meeting-detail a, .meeting-transcript, .meeting-protocol, .speaker-row blockquote { overflow-wrap: anywhere; }
-.meeting-detail .meeting-protocol { white-space: pre-wrap; font: inherit; margin: 0; }
+.meeting-protocol { line-height: 1.65; }
+.meeting-protocol > * { margin: 0; }
+.meeting-protocol > * + * { margin-top: 12px; }
+.meeting-protocol > h1, .meeting-protocol > h2, .meeting-protocol > h3 { margin-top: 24px; line-height: 1.3; }
+.meeting-protocol > :first-child { margin-top: 0; }
+.meeting-protocol h1 { font-size: 22px; }
+.meeting-protocol h2 { font-size: 19px; }
+.meeting-protocol h3 { font-size: 16px; }
+.meeting-protocol p { white-space: pre-wrap; }
+.meeting-protocol ul, .meeting-protocol ol { padding-left: 24px; }
+.meeting-sessions { margin-top: 24px; scroll-margin-top: 20px; }
 .meeting-transcript { line-height: 1.65; }
 .meeting-transcript p + p { margin-top: 16px; }
 .speaker-row { border-bottom: 1px solid var(--border); padding-block: 16px; }

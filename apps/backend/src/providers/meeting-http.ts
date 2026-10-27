@@ -1,3 +1,4 @@
+import { recordProviderResponse } from "./key-status.js";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { Readable } from "node:stream";
@@ -14,6 +15,7 @@ export async function meetingRequest(url: string, init: RequestInit): Promise<Re
     const request = (new URL(url).protocol === "https:" ? httpsRequest : httpRequest)(url, {
       method: init.method ?? "GET", headers: Object.fromEntries(headers), signal: init.signal ?? undefined
     }, response => {
+      recordProviderResponse(url, response.statusCode ?? 500);
       const chunks: Buffer[] = [];
       response.on("data", chunk => chunks.push(Buffer.from(chunk)));
       response.once("error", reject);

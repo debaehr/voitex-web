@@ -22,7 +22,7 @@ it("presents recovery choices, offline upload progress and the interrupted state
 it("renders protocols as escaped plain text and exposes retry for provider errors", () => {
   const result = { id: "id", title: "Review", language: "de", status: "done" as const, progress: 100, protocol: "<script>never()</script>\n# Meeting" };
   const html = renderToStaticMarkup(<ProtocolView state={{ ...initialMeetingSnapshot, phase: "done", result }} controller={controller} language="de" dictationActive={false} />);
-  expect(html).toContain('<pre class="meeting-protocol">&lt;script&gt;'); expect(html).not.toContain("<script>"); expect(html).toContain("Fertig");
+  expect(html).toContain('<div class="meeting-protocol"><p>&lt;script&gt;'); expect(html).not.toContain("<script>"); expect(html).toContain("Fertig");
   const error = renderToStaticMarkup(<ProtocolView state={{ ...initialMeetingSnapshot, phase: "error", result: { ...result, status: "error" }, error: "Fehler" }} controller={controller} language="de" dictationActive={false} />);
   expect(error).toContain("Erneut versuchen"); expect(error).toContain('role="alert"');
 });

@@ -69,3 +69,17 @@ for (const [name, provider] of Object.entries({ openai, mistral, groq })) {
     else expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toHaveProperty("max_tokens", limit);
   });
 }
+
+
+it.each(["transcribe", "process"])("OpenAI %s records real SDK rejection and recovery", async kind => {
+  const { keyStatus } = await import("../src/providers/key-status.js");
+  vi.stubEnv("OPENAI_API_KEY", "dummy-status");
+  const method = kind === "transcribe" ? create : respond;
+  method.mockRejectedValueOnce(Object.assign(new Error("rejected"), { status: 401 }));
+  const call = () => kind === "transcribe"
+    ? openai.transcribeAudio({ buffer: Buffer.from("audio"), filename: "test.webm", mimetype: "audio/webm" })
+    : openai.processTranscript({ transcript: "Text", mode: "formal" });
+  await expect(call()).rejects.toMatchObject({ status: 401 });
+  expect(keyStatus.invalid()).toContain("openai");
+  await call(); expect(keyStatus.invalid()).not.toContain("openai");
+});

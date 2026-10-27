@@ -1,3 +1,4 @@
+import { trackProviderCall } from "./key-status.js";
 import { outputTokenLimit } from "./shared.js";
 import { modeInstructions } from "../prompts.js";
 import { buildProcessInstructions, transcriptionLanguageFields } from "./shared.js";
@@ -16,12 +17,12 @@ export async function transcribeAudio(input: {
   const client = createClient();
 
   const file = await toFile(input.buffer, input.filename, { type: input.mimetype });
-  const transcription = await client.audio.transcriptions.create({
+  const transcription = await trackProviderCall("openai", () => client.audio.transcriptions.create({
     file,
     model: "gpt-4o-mini-transcribe",
     ...(input.prompt ? { prompt: input.prompt } : {}),
     ...transcriptionLanguageFields(input.language)
-  });
+  }));
 
   return {
     text: transcription.text,
@@ -35,12 +36,12 @@ export async function processTranscript(input: ProcessInput) {
   const client = createClient();
 
   const instructions = buildProcessInstructions(input, modeInstructions);
-  const response = await client.responses.create({
+  const response = await trackProviderCall("openai", () => client.responses.create({
     model: "gpt-4o-mini",
     instructions,
     input: input.transcript,
     max_output_tokens: outputTokenLimit(input)
-  });
+  }));
 
   return {
     text: response.output_text.trim(),

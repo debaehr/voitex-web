@@ -1,8 +1,11 @@
 import dotenv from "dotenv";
+import { keyStatus } from "./providers/key-status.js";
 import { fileURLToPath } from "node:url";
 import { createApp } from "./app.js";
 
 dotenv.config({ path: fileURLToPath(new URL("../.env", import.meta.url)) });
+
+keyStatus.start();
 
 const port = Number(process.env.PORT ?? 3006);
 const host = process.env.HOST ?? "127.0.0.1";

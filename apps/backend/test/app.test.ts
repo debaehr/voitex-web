@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Server } from "node:http";
+import { keyStatus } from "../src/providers/key-status.js";
 import { createApp } from "../src/app.js";
 import { DEFAULT_UPLOAD_LIMIT_BYTES } from "../src/routes/api.js";
 import { defaultPrompts } from "../src/prompts.js";
@@ -38,13 +39,18 @@ describe("API and frontend", () => {
   it("reports configured providers without disclosing keys", async () => {
     const request = await start();
     for (const key of ["OPENAI_API_KEY", "MISTRAL_API_KEY", "GROQ_API_KEY", "ASSEMBLYAI_API_KEY"]) vi.stubEnv(key, "");
-    expect(await (await request("/api/providers")).json()).toEqual({ stt: [], llm: [], meetings: [] });
+    expect(await (await request("/api/providers")).json()).toEqual({ stt: [], llm: [], meetings: [], invalid: [] });
     vi.stubEnv("OPENAI_API_KEY", "secret-openai"); vi.stubEnv("GROQ_API_KEY", "secret-groq"); vi.stubEnv("ASSEMBLYAI_API_KEY", "secret-meeting");
-    expect(await (await request("/api/providers")).json()).toEqual({ stt: ["openai", "groq"], llm: ["openai", "groq"], meetings: ["assemblyai"] });
+    expect(await (await request("/api/providers")).json()).toEqual({ stt: ["openai", "groq"], llm: ["openai", "groq"], meetings: ["assemblyai"], invalid: [] });
     vi.stubEnv("MISTRAL_API_KEY", "secret-mistral");
     const available = await (await request("/api/providers")).json();
     expect(available.stt).toEqual(["openai", "mistral", "groq"]);
     expect(available.meetings).toEqual(["mistral", "assemblyai"]);
+    keyStatus.record("mistral", 401); keyStatus.record("assemblyai", 403);
+    const invalid = await (await request("/api/providers")).json();
+    expect(invalid).toEqual({ stt: ["openai", "mistral", "groq"], llm: ["openai", "mistral", "groq"], meetings: ["mistral", "assemblyai"], invalid: ["mistral", "assemblyai"] });
+    expect(JSON.stringify(invalid)).not.toContain("secret-");
+    keyStatus.record("mistral", 200); keyStatus.record("assemblyai", 200);
   });
   it("serves SPA, static files and cache policies while keeping API JSON", async () => {
     await mkdir(join(dir, "frontend/assets"), { recursive: true });
