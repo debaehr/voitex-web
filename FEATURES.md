@@ -54,6 +54,7 @@
 - `F-006` Langzeitaufnahme bis 3 h mit Sprecherzuordnung (AssemblyAI) und Protokoll — **in-arbeit**
 - `F-007` Meeting-Upload mit Sprecherzuordnung und Zusammenfassung — **in-arbeit**
 - `F-014` Mistral als Standard-Anbieter (Datenschutz) — **in-arbeit**
+- `F-015` Claude als Anbieter für Textaufgaben — **offen**
 
 ## Arbeitsmittel und Daten
 
