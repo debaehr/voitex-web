@@ -65,6 +65,12 @@ ausstehend: Live-Abnahme durch den Menschen (A4 der Specs), danach `verification
     ist Etappe 3; bis dahin Knopf deaktivieren oder klar als „folgt“ kennzeichnen.
   - Hinweisbox oben im Diktat entfernen (`apps/frontend/src/views/DictationView.tsx:21-25`).
   - Sprachwahl im Overlay: Antwort gegeben (siehe Chat 27.10.); Entscheidung offen, §6.
+  - Neu gewünscht: Übersetzer (V2T hatte nur „nach Englisch“). Overlay mit 3 Schaltern:
+    links Aufnahmesprache, rechts **Zielsprache** (mind. DE, EN, HR); Modus-Schalter wandert
+    über den Aufnahmeknopf. Aufnahmesprache um Kroatisch (`hr`) ergänzen. Neues Feature
+    nötig (Vorschlag F-012), Spec vor Umsetzung.
+  - F-006 Langzeitaufnahme: Hintergrund-/Sperrbildschirm-Verhalten am Handy klären
+    (iOS stoppt Mikrofon im Hintergrund, Android läuft meist weiter) — in Spec aufnehmen.
 - [ ] Etappe 2: F-005 Diktat (Mikrofon, Pegel, `/api/transcribe` + `/api/process`,
   Zwischenablage, Verlauf), F-008–F-011 an Backend anbinden.
 - [ ] `apps/backend/.env` anlegen — nur der OpenAI-Schlüssel wird aus V2T übernommen.
