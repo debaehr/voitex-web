@@ -63,13 +63,13 @@ ausstehend: Live-Abnahme durch den Menschen (A4 der Specs), danach `verification
   `protocol`/`meetings` unverändert); „Aufnahme starten“ deaktiviert mit Hinweis; Hinweisbox
   im Diktat entfernt; Modi als eigener Menüpunkt `modes` (Handy: unter „Mehr“);
   Aufnahmesprache + Kroatisch, Standard DE (Entscheidung Mensch).
-- [ ] F-013 eigene Modi umgesetzt (27.10., Codex xhigh), live; Live-Abnahme A4 offen.
+- [x] F-013 eigene Modi umgesetzt und abgenommen (27.10.).
   Datensicherung vor Deploy: `~/backup/voitex-web-data-<zeitstempel>/`.
 - [ ] Weitere Wünsche (27.10.):
   - Neu gewünscht: Übersetzer (V2T hatte nur „nach Englisch“). Overlay mit 3 Schaltern:
     links Aufnahmesprache, rechts **Zielsprache** (mind. DE, EN, HR); Modus-Schalter wandert
     über den Aufnahmeknopf. Aufnahmesprache um Kroatisch (`hr`) ergänzen. Neues Feature
-    als F-012 umgesetzt (27.10., Codex), live; Live-Abnahme A4 durch Mensch offen.
+    als F-012 umgesetzt und abgenommen (27.10.).
     Hinweis: LLM-Ausgabe weiterhin auf 1200 Tokens begrenzt (lange Texte können abbrechen).
   - F-006 Langzeitaufnahme: Hintergrund-/Sperrbildschirm-Verhalten am Handy klären
     (iOS stoppt Mikrofon im Hintergrund, Android läuft meist weiter) — in Spec aufnehmen.

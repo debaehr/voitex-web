@@ -50,7 +50,7 @@
 
 - `F-005` Diktat mit Modi und KI-Nachbearbeitung — **fertig**
 - `F-012` Übersetzer: Zielsprache im Overlay (mind. Deutsch, Englisch, Kroatisch) — **fertig**
-- `F-013` Eigene Modi mit eigenem Prompt anlegen und löschen — **in-arbeit**
+- `F-013` Eigene Modi mit eigenem Prompt anlegen und löschen — **fertig**
 - `F-006` Langzeitaufnahme bis 3 h mit Sprecherzuordnung (AssemblyAI) und Protokoll — **offen**
 - `F-007` Meeting-Upload mit Sprecherzuordnung und Zusammenfassung — **offen**
 
