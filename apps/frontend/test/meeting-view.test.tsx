@@ -33,3 +33,18 @@ it("disables the overlay recording button with a linked explanation during a mee
   expect(html).toMatch(/aria-label="Diktat starten" disabled="" aria-describedby="dictation-lock"/);
   expect(html).toContain('id="dictation-lock"'); expect(html).toContain("Diktat gesperrt");
 });
+
+it("shows the system audio switch only when supported", () => {
+  for (const systemAudioSupported of [true, false]) {
+    const html = renderToStaticMarkup(<ProtocolView state={{ ...initialMeetingSnapshot, phase: "idle", systemAudioSupported }} controller={controller} language="de" dictationActive={false} />);
+    expect(html.includes("Ton des Computers mit aufnehmen (Teams, Zoom …)")).toBe(systemAudioSupported);
+    expect(html).not.toContain('checked=""');
+  }
+});
+it("shows explicit display permission choices, two meters and the ended banner", () => {
+  const choices = renderToStaticMarkup(<ProtocolView state={{ ...initialMeetingSnapshot, phase: "interrupted", systemAudioChoice: "Kein Ton freigegeben" }} controller={controller} language="de" dictationActive={false} />);
+  expect(choices).toContain("Erneut versuchen"); expect(choices).toContain("Nur Mikrofon");
+  const html = renderToStaticMarkup(<ProtocolView state={{ ...initialMeetingSnapshot, phase: "recording", systemAudio: true, systemAudioEnded: true }} controller={controller} language="de" dictationActive={false} />);
+  expect(html).toContain('aria-label="Mikrofonpegel"'); expect(html).toContain('aria-label="Computerpegel"');
+  expect(html).toContain("Computerton wird nicht mehr aufgenommen"); expect(html).toContain("Erneut freigeben"); expect(html).toContain("Aufnahme läuft");
+});

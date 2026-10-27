@@ -7,11 +7,13 @@ import type { QueueEnvironment } from "../src/lib/meeting-upload";
 import { MicrophoneGate } from "../src/lib/microphone";
 
 export class FakeCapture implements MeetingCapture {
+  addSystemAudio = vi.fn(async () => {});
+  systemAudioEnded?: () => void;
   contentType = "audio/webm;codecs=opus";
   chunk?: (blob: Blob) => void;
   interrupted?: (message: string) => void;
   level?: (value: number) => void;
-  start = vi.fn((chunk, interrupted, level) => { this.chunk = chunk; this.interrupted = interrupted; this.level = level; });
+  start = vi.fn((chunk, interrupted, level, systemAudioEnded) => { this.systemAudioEnded = systemAudioEnded; this.chunk = chunk; this.interrupted = interrupted; this.level = level; });
   pause = vi.fn();
   resume = vi.fn();
   stop = vi.fn(async () => { this.emit("tail"); });
@@ -23,7 +25,7 @@ export function fixture(store = new MemoryMeetingStore(), microphone = new Micro
   const visibility = new Set<(hidden: boolean) => void>();
   const captures: FakeCapture[] = [];
   const environment: MeetingEnvironment = {
-    now: () => Date.now(), monotonic: () => Date.now(), isIOS: false, wakeSupported: true,
+    now: () => Date.now(), monotonic: () => Date.now(), isIOS: false, systemAudioSupported: true, wakeSupported: true,
     openCapture: vi.fn(async () => { const capture = new FakeCapture(); captures.push(capture); return capture; }),
     every: (callback, milliseconds) => { const timer = setInterval(callback, milliseconds); return () => clearInterval(timer); },
     onVisibility: callback => { visibility.add(callback); return () => { visibility.delete(callback); }; },

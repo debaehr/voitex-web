@@ -1,3 +1,4 @@
+import { SystemAudioChoice } from "../src/lib/meeting-browser";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { MAX_MEETING_SECONDS } from "../src/lib/meeting-recorder";
 import { MemoryMeetingStore } from "../src/lib/meeting-store";
@@ -154,7 +155,7 @@ it("measures elapsed recording time independently of wall-clock changes", async 
   expect(f.api.finishMeeting.mock.calls[0][1].durationSeconds).toBe(5); await f.controller.dispose();
 });
 it("cleans up a late microphone permission grant after the App unmounts", async () => {
-  const f = fixture(); const capture = { contentType: "audio/mp4", start: vi.fn(), pause: vi.fn(), resume: vi.fn(), stop: vi.fn(async () => {}) };
+  const f = fixture(); const capture = { addSystemAudio: vi.fn(async () => {}), contentType: "audio/mp4", start: vi.fn(), pause: vi.fn(), resume: vi.fn(), stop: vi.fn(async () => {}) };
   let grant!: (value: typeof capture) => void;
   vi.mocked(f.environment.openCapture).mockImplementationOnce(() => new Promise(resolve => { grant = resolve; }));
   await f.controller.initialize(); const starting = f.controller.start("", "de"); await f.controller.dispose(); grant(capture); await starting;
@@ -166,4 +167,63 @@ it("resumes an unfinished offline finish after reload without reopening the micr
   const f = fixture(store); f.setOnline(false); await f.controller.initialize(); await settle();
   expect(f.state().phase).toBe("finishing"); expect(f.api.finishMeeting).not.toHaveBeenCalled();
   f.setOnline(true); await settle(); expect(f.state().phase).toBe("processing"); expect(f.environment.openCapture).not.toHaveBeenCalled(); await f.controller.dispose();
+});
+
+it("persists system audio and reattaches ended audio without interrupting or adding a part", async () => {
+  const f = fixture(); await f.controller.initialize(); await f.controller.start("Review", "de", [], true);
+  expect(f.environment.openCapture).toHaveBeenCalledWith({ systemAudio: true });
+  expect((await f.store.listMeetings())[0].systemAudio).toBe(true);
+  f.captures[0].systemAudioEnded!(); expect(f.state()).toMatchObject({ phase: "recording", systemAudioEnded: true });
+  await f.controller.addSystemAudio(); expect(f.captures[0].addSystemAudio).toHaveBeenCalledOnce();
+  expect(f.state().systemAudioEnded).toBe(false); expect(f.state().meeting!.parts).toHaveLength(1);
+  await f.controller.finish(); expect(f.captures[0].stop).toHaveBeenCalledOnce(); await f.controller.dispose();
+});
+it("offers a choice after cancelled start and only starts microphone audio after explicit selection", async () => {
+  const f = fixture(); await f.controller.initialize(); vi.mocked(f.environment.openCapture).mockRejectedValueOnce(new SystemAudioChoice("Abgebrochen"));
+  await f.controller.start("", "de", [], true);
+  expect(f.state()).toMatchObject({ phase: "idle", systemAudioChoice: "Abgebrochen", error: null });
+  expect(f.api.createMeeting).not.toHaveBeenCalled();
+  await f.controller.start("", "de", [], false); expect(f.state()).toMatchObject({ phase: "recording", systemAudioChoice: null, systemAudio: false });
+  await f.controller.dispose();
+});
+it("re-requests system audio after interruption, keeps the gap and supports explicit microphone fallback", async () => {
+  const f = fixture(); await f.controller.initialize(); await f.controller.start("", "de", [], true);
+  await vi.advanceTimersByTimeAsync(5000); await f.controller.interrupt("Mikrofon unterbrochen");
+  vi.mocked(f.environment.openCapture).mockRejectedValueOnce(new SystemAudioChoice("Abgebrochen")); await f.controller.resume();
+  expect(f.environment.openCapture).toHaveBeenLastCalledWith({ systemAudio: true });
+  expect(f.state()).toMatchObject({ phase: "interrupted", systemAudioChoice: "Abgebrochen" });
+  expect(f.state().meeting!.parts).toHaveLength(1);
+  await vi.advanceTimersByTimeAsync(5000); await f.controller.resume(false);
+  expect(f.environment.openCapture).toHaveBeenLastCalledWith({ systemAudio: false });
+  expect(f.state().meeting!.parts).toHaveLength(2); expect((await f.store.listMeetings())[0].systemAudio).toBe(false);
+  await f.controller.dispose();
+});
+it.each([true, undefined])("recovers the saved system audio preference %s, treating legacy records as microphone only", async systemAudio => {
+  const store = new MemoryMeetingStore(); const meeting = { ...localMeeting(), systemAudio }; await store.saveChunk(meeting, localChunk(0));
+  const f = fixture(store); await f.controller.initialize(); await f.controller.resume();
+  expect(f.environment.openCapture).toHaveBeenCalledWith({ systemAudio: systemAudio ?? false }); await f.controller.dispose();
+});
+it("offers retry on cancelled recovery and requests display again on retry", async () => {
+  const store = new MemoryMeetingStore(); await store.saveChunk({ ...localMeeting(), systemAudio: true }, localChunk(0));
+  const f = fixture(store); await f.controller.initialize();
+  vi.mocked(f.environment.openCapture).mockRejectedValueOnce(new SystemAudioChoice("Abgebrochen")); await f.controller.resume();
+  expect(f.state().systemAudioChoice).toBe("Abgebrochen"); await f.controller.resume(true);
+  expect(f.environment.openCapture).toHaveBeenLastCalledWith({ systemAudio: true }); expect(f.state().phase).toBe("recording"); await f.controller.dispose();
+});
+it("stops the mixed capture at the three-hour limit", async () => {
+  const f = fixture(); await f.controller.initialize(); await f.controller.start("", "de", [], true);
+  vi.setSystemTime(Date.now() + MAX_MEETING_SECONDS * 1000); await vi.advanceTimersByTimeAsync(250); await settle();
+  expect(f.captures[0].stop).toHaveBeenCalledOnce(); expect(f.api.finishMeeting).toHaveBeenCalledOnce(); await f.controller.dispose();
+});
+
+it("keeps recording on a cancelled regrant and still allows Stop while a regrant dialog is pending", async () => {
+  const f = fixture(); await f.controller.initialize(); await f.controller.start("", "de", [], true);
+  f.captures[0].systemAudioEnded!();
+  f.captures[0].addSystemAudio.mockRejectedValueOnce(new SystemAudioChoice("Abgebrochen")); await f.controller.addSystemAudio();
+  expect(f.state()).toMatchObject({ phase: "recording", systemAudioEnded: true });
+  let grant!: () => void;
+  f.captures[0].addSystemAudio.mockImplementationOnce(() => new Promise(resolve => { grant = resolve; }));
+  const adding = f.controller.addSystemAudio(); await f.controller.finish();
+  expect(f.captures[0].stop).toHaveBeenCalledOnce(); expect(f.state().phase).toBe("processing");
+  grant(); await adding; await f.controller.dispose();
 });

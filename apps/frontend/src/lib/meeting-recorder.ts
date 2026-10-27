@@ -1,3 +1,4 @@
+import { SystemAudioChoice } from "./meeting-browser";
 import type { MeetingCapture, MeetingEnvironment } from "./meeting-browser";
 import type { MeetingStore } from "./meeting-store";
 import { MeetingUploadQueue, type QueueEnvironment } from "./meeting-upload";
@@ -10,10 +11,12 @@ export interface MeetingSnapshot {
   phase: RecordingPhase; meeting: LocalMeeting | null; result: MeetingResult | null;
   elapsed: number; levels: number[]; secured: number; pending: number; total: number;
   offline: boolean; error: string | null; uploadError: string | null; hint: string | null; wakeHint: string | null;
+  systemAudioSupported: boolean; systemAudio: boolean; computerLevels: number[]; systemAudioEnded: boolean; systemAudioChoice: string | null;
   active: boolean; canResume: boolean; isIOS: boolean;
 }
 export const initialMeetingSnapshot: MeetingSnapshot = {
   phase: "loading", meeting: null, result: null, elapsed: 0, levels: [], secured: 0, pending: 0, total: 0,
+  systemAudioSupported: false, systemAudio: false, computerLevels: [], systemAudioEnded: false, systemAudioChoice: null,
   offline: false, error: null, uploadError: null, hint: null, wakeHint: null, active: false, canResume: false, isIOS: false,
 };
 const clone = <T,>(value: T): T => structuredClone(value);
@@ -51,7 +54,8 @@ export class MeetingRecorder {
       secured: this.meeting && this.queue ? this.queue.securedSeconds(this.meeting) : 0,
       active: ["starting", "recording", "paused", "interrupted"].includes(phase),
       canResume: !!this.meeting && this.meeting.status !== "finishing" && meetingDuration(this.meeting) < MAX_MEETING_SECONDS,
-      isIOS: this.environment.isIOS,
+      isIOS: this.environment.isIOS, systemAudioSupported: this.environment.systemAudioSupported,
+      systemAudio: this.meeting?.systemAudio ?? false,
     };
     this.listeners.forEach(callback => callback());
   }
@@ -114,20 +118,20 @@ export class MeetingRecorder {
     } catch { this.emit({ wakeHint: "Bildschirm konnte nicht wach gehalten werden. Bitte den Bildschirm anlassen." }); }
     finally { this.wakePending = false; }
   }
-  async start(title: string, language: string, participants: string[] = []) {
+  async start(title: string, language: string, participants: string[] = [], systemAudio = false) {
     if (this.actionPending || this.snapshot.phase !== "idle" || !this.microphone.acquire("meeting")) return;
-    this.actionPending = true; this.emit({ phase: "starting", error: null });
+    this.actionPending = true; this.emit({ phase: "starting", error: null, systemAudioChoice: null });
     let capture: MeetingCapture | undefined;
     try {
-      capture = await this.environment.openCapture();
+      capture = await this.environment.openCapture({ systemAudio });
       if (this.disposed) { await capture.stop(); return; }
       const { id } = await this.api.createMeeting({ ...(title.trim() ? { title: title.trim() } : {}), source: "recording", language, ...(participants.length ? { participants } : {}) });
-      this.meeting = { id, title: title.trim(), language, parts: [], status: "interrupted" };
+      this.meeting = { id, title: title.trim(), language, parts: [], status: "interrupted", systemAudio };
       await this.saveMetadata(); this.createQueue();
       await this.beginPart(capture);
     } catch (error) {
       await capture?.stop(); this.capture = undefined; this.microphone.release("meeting");
-      this.emit({ phase: this.meeting ? "recovery" : "idle", error: error instanceof Error ? error.message : "Aufnahme konnte nicht gestartet werden." });
+      this.emit({ phase: this.meeting ? "recovery" : "idle", systemAudioChoice: error instanceof SystemAudioChoice ? error.message : null, error: error instanceof SystemAudioChoice ? null : error instanceof Error ? error.message : "Aufnahme konnte nicht gestartet werden." });
     } finally { this.actionPending = false; }
   }
   private async beginPart(capture: MeetingCapture) {
@@ -142,6 +146,8 @@ export class MeetingRecorder {
     this.activeSince = this.environment.monotonic();
     capture.start(blob => this.receiveChunk(blob), message => { void this.interrupt(message); }, value => {
       if (this.snapshot.phase === "recording") this.emit({ levels: [...this.snapshot.levels.slice(-17), value] });
+    }, () => { if (this.capture === capture) this.emit({ systemAudioEnded: true, computerLevels: [] }); }, value => {
+      if (this.snapshot.phase === "recording") this.emit({ computerLevels: [...this.snapshot.computerLevels.slice(-17), value] });
     });
     this.cancelTick = this.environment.every(() => {
       this.accountTime(); this.emit({ elapsed: meetingDuration(this.meeting!) });
@@ -149,7 +155,7 @@ export class MeetingRecorder {
         this.emit({ hint: "Drei Stunden erreicht. Die Aufnahme wird automatisch beendet und verarbeitet." }); void this.finish();
       }
     }, 250);
-    this.emit({ phase: "recording", error: null, hint: null }); void this.requestWake();
+    this.emit({ phase: "recording", error: null, hint: null, systemAudioEnded: false, systemAudioChoice: null, computerLevels: [] }); void this.requestWake();
   }
   private receiveChunk(blob: Blob) {
     if (!this.meeting || !blob.size) return;
@@ -185,10 +191,10 @@ export class MeetingRecorder {
     if (!this.capture || this.snapshot.phase !== "recording" || this.actionPending) return;
     try {
       this.capture.pause(); this.accountTime(); this.activeSince = undefined;
-      this.meeting!.status = "paused"; this.emit({ phase: "paused", levels: [] }); await this.saveMetadata();
+      this.meeting!.status = "paused"; this.emit({ phase: "paused", levels: [], computerLevels: [] }); await this.saveMetadata();
     } catch { await this.interrupt("Die Aufnahme konnte nicht pausiert werden. Bitte fortsetzen."); }
   }
-  async resume() {
+  async resume(systemAudio = this.meeting?.systemAudio ?? false) {
     if (this.actionPending || this.closing || !this.meeting || !this.snapshot.canResume) return;
     if (this.snapshot.phase === "paused" && this.capture) {
       try {
@@ -202,13 +208,25 @@ export class MeetingRecorder {
     if (this.snapshot.phase === "recovery" && !this.microphone.acquire("meeting")) {
       this.emit({ error: "Bitte zuerst das Diktat beenden." }); return;
     }
-    this.actionPending = true; this.emit({ phase: "starting", error: null });
+    this.actionPending = true; this.emit({ phase: "starting", error: null, systemAudioChoice: null });
     let capture: MeetingCapture | undefined;
     try {
-      capture = await this.environment.openCapture(); await this.retryWrites(); await this.beginPart(capture);
+      capture = await this.environment.openCapture({ systemAudio });
+      this.meeting.systemAudio = systemAudio; await this.retryWrites(); await this.beginPart(capture);
     } catch (error) {
       await capture?.stop(); this.capture = undefined;
-      this.emit({ phase: "interrupted", error: error instanceof Error ? error.message : "Aufnahme konnte nicht fortgesetzt werden." });
+      this.emit({ phase: "interrupted", systemAudioChoice: error instanceof SystemAudioChoice ? error.message : null, error: error instanceof SystemAudioChoice ? null : error instanceof Error ? error.message : "Aufnahme konnte nicht fortgesetzt werden." });
+    } finally { this.actionPending = false; }
+  }
+  async addSystemAudio() {
+    if (!this.capture || !this.meeting?.systemAudio || this.actionPending || this.closing || this.finishing) return;
+    const capture = this.capture;
+    this.actionPending = true;
+    try {
+      await capture.addSystemAudio();
+      if (this.capture === capture && !this.closing) this.emit({ systemAudioEnded: false, error: null });
+    } catch (error) {
+      if (this.capture === capture) this.emit({ error: error instanceof Error ? error.message : "Computerton konnte nicht freigegeben werden." });
     } finally { this.actionPending = false; }
   }
   private closePart() {
@@ -229,7 +247,7 @@ export class MeetingRecorder {
   async interrupt(hint: string) {
     if (!this.capture || this.closing || this.finishing) return;
     this.meeting!.status = "interrupted";
-    this.emit({ phase: "interrupted", hint, levels: [] });
+    this.emit({ phase: "interrupted", hint, levels: [], computerLevels: [] });
     try { await this.closePart(); }
     catch { this.emit({ error: "Lokale Sicherung fehlgeschlagen. Bitte die App geöffnet lassen und erneut verarbeiten." }); }
     this.emit({ elapsed: meetingDuration(this.meeting!) });
@@ -243,9 +261,9 @@ export class MeetingRecorder {
     await this.saveMetadata();
   }
   async finish() {
-    if (!this.meeting || this.finishing || this.actionPending || !["recording", "paused", "interrupted", "recovery", "finishing"].includes(this.snapshot.phase)) return;
+    if (!this.meeting || this.finishing || (this.actionPending && !this.capture) || !["recording", "paused", "interrupted", "recovery", "finishing"].includes(this.snapshot.phase)) return;
     this.finishing = true; this.meeting.status = "finishing";
-    this.emit({ phase: "finishing", error: null, levels: [] });
+    this.emit({ phase: "finishing", error: null, levels: [], computerLevels: [], systemAudioChoice: null });
     try {
       await this.closePart(); this.microphone.release("meeting");
       await this.retryWrites(); this.emit({ elapsed: meetingDuration(this.meeting) });

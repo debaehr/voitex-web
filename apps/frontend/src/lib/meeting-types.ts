@@ -14,6 +14,8 @@ export interface FinishMeeting {
 export interface LocalMeeting {
   id: string; title: string; language: string;
   status: "recording" | "paused" | "interrupted" | "finishing" | "processing";
+  // Optional for recovery records created before computer audio was supported.
+  systemAudio?: boolean;
   parts: MeetingPart[];
 }
 export interface MeetingChunk {
