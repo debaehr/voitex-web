@@ -7,6 +7,8 @@ import { availableDictationModes, resolveMode } from "./lib/modes";
 import { resultMeta } from "./lib/history";
 import { readPreference, writePreference } from "./lib/device-preferences";
 import { useRecorder } from "./lib/useRecorder";
+import { useMeetingRecorder } from "./lib/useMeetingRecorder";
+import { MicrophoneGate } from "./lib/microphone";
 import { MoreHorizontal } from "lucide-react";
 import { OverlayBar, type OverlayMessage } from "./components/OverlayBar";
 import { ConfirmDialog } from "./components/Dialog";
@@ -62,8 +64,11 @@ function AppContent() {
   const locked = useRef(false);
   const processing = useRef(false);
   const recordingOptions = useRef<DictationOptions | null>(null);
+  const [microphone] = useState(() => new MicrophoneGate());
+  const meeting = useMeetingRecorder(microphone);
   const recorder = useRecorder(text => {
     locked.current = false;
+    microphone.release("dictation");
     showMessage({ kind: "warning", text });
   });
   const { recording, elapsed, levels } = recorder;
@@ -81,19 +86,21 @@ function AppContent() {
   }, []);
 
   async function startRecording() {
-    if (locked.current || recording || busyText) return;
+    if (locked.current || recording || busyText || meeting.state.active) return;
     if (settingsStatus !== "ready" || !settings) {
       showMessage({ kind: "warning", text: "Einstellungen konnten nicht geladen werden. Bitte die Seite neu laden." });
       return;
     }
+    if (!microphone.acquire("dictation")) return;
     locked.current = true;
     recordingOptions.current = snapshotDictationOptions({ mode: activeMode, language, targetLanguage, settings });
     setMessage(null);
     setBusyText("Mikrofon wird gestartet …");
     try {
-      if (!(await recorder.start())) locked.current = false;
+      if (!(await recorder.start())) { locked.current = false; microphone.release("dictation"); }
     } catch (error) {
       locked.current = false;
+      microphone.release("dictation");
       showMessage({ kind: "warning", text: error instanceof Error ? error.message : "Aufnahme fehlgeschlagen." });
     } finally { setBusyText(null); }
   }
@@ -116,6 +123,7 @@ function AppContent() {
     } finally {
       processing.current = false;
       locked.current = false;
+      microphone.release("dictation");
       setBusyText(null);
     }
   }
@@ -192,10 +200,10 @@ function AppContent() {
       <main className="main">
         <header className="page-header">
           <h1 className="page-title">{current.title}</h1>
-          {recording ? (
+          {recording || meeting.state.active || meeting.state.phase === "finishing" ? (
             <div className="live-indicator">
               <span className="live-dot" aria-hidden />
-              <span>Aufnahme läuft</span>
+              <span>{meeting.state.active ? meeting.state.phase === "paused" ? "Meeting pausiert" : meeting.state.phase === "interrupted" ? "Meeting unterbrochen" : "Meeting-Aufnahme" : meeting.state.phase === "finishing" ? "Meeting wird gesichert" : "Aufnahme läuft"}</span>
             </div>
           ) : null}
         </header>
@@ -204,7 +212,7 @@ function AppContent() {
           {section === "dictation" ? (
             <DictationView lastResult={lastResult ? { text: lastResult.text, meta: resultMeta(lastResult) } : null} onCopy={copy} />
           ) : section === "protocol" ? (
-            <ProtocolView />
+            <ProtocolView state={meeting.state} controller={meeting.controller} language={language} dictationActive={recording || !!busyText} />
           ) : section === "meetings" ? (
             <MeetingsView />
           ) : section === "lexicon" ? (
@@ -235,6 +243,8 @@ function AppContent() {
             levels={levels}
             busyText={busyText}
             message={message}
+            recordingDisabled={meeting.state.active}
+            lockText={meeting.state.active ? "Meeting-Aufnahme aktiv — Diktat gesperrt." : null}
             onStart={() => { void startRecording(); }}
             onStop={() => { void stopRecording(); }}
           />

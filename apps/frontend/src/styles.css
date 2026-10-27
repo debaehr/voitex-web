@@ -1237,3 +1237,22 @@ textarea {
 .modes-list .badge { flex-shrink: 0; }
 .dialog-head .card-title { min-width: 0; overflow-wrap: anywhere; }
 .dialog-head > .btn { flex-shrink: 0; }
+
+/* Meeting recording keeps the existing card rhythm, including on narrow phones. */
+.meeting-page { min-width: 0; overflow-wrap: anywhere; }
+.meeting-page .card, .meeting-page .field, .meeting-page .card-content { min-width: 0; }
+.meeting-notice { align-items: flex-start; padding-block: 4px 8px; }
+.meeting-notice > svg { flex-shrink: 0; margin-top: 2px; }
+.meeting-notice .stack { gap: 8px; }
+.meeting-time { font-size: 24px; font-variant-numeric: tabular-nums; }
+.meeting-levels { display: flex; height: 32px; align-items: center; gap: 3px; }
+.meeting-levels i { width: 3px; height: 28px; border-radius: 2px; background: var(--foreground); transition: transform 0.1s linear; }
+.meeting-upload { gap: 6px; font-variant-numeric: tabular-nums; }
+.meeting-page progress { width: 100%; height: 8px; accent-color: var(--primary); }
+.meeting-actions .btn { min-height: 44px; height: auto; padding-block: 8px; max-width: 100%; white-space: normal; }
+.meeting-protocol { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.overlay-dot:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+@media (max-width: 767px) {
+  .meeting-page input { font-size: 16px; }
+  .meeting-page .card-header, .meeting-page .card-content { padding-inline: 16px; }
+}

@@ -7,6 +7,7 @@ import { DictationView } from "../src/views/DictationView";
 import { MeetingsView } from "../src/views/MeetingsView";
 import { ModesView } from "../src/views/ModesView";
 import { ProtocolView } from "../src/views/ProtocolView";
+import { initialMeetingSnapshot } from "../src/lib/meeting-recorder";
 
 describe("navigation follow-up", () => {
   it("renames recording and upload labels and titles while retaining section ids", () => {
@@ -26,11 +27,12 @@ describe("navigation follow-up", () => {
     expect(languages[3]).toEqual({ id: "hr", label: "Kroatisch (hr)", short: "HR" });
   });
 
-  it("disables long recording and explains availability beside the button", () => {
-    const html = renderToStaticMarkup(<ProtocolView />);
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*aria-describedby="long-recording-hint"/);
-    expect(html).toContain('id="long-recording-hint"');
-    expect(html).toContain("Langzeitaufnahme folgt in Etappe 3.");
+  it("explains recording setup and disables meeting starts during dictation", () => {
+    const html = renderToStaticMarkup(<ProtocolView state={{ ...initialMeetingSnapshot, phase: "idle" }} controller={null} language="de" dictationActive />);
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*aria-describedby="meeting-start-hint"/);
+    expect(html).toContain("Bitte zuerst das Diktat beenden.");
+    expect(html).toContain("alle Teilnehmenden");
+    expect(html).toContain("App geöffnet lassen");
   });
 
   it("points upload users to Meetings for recording", () => {

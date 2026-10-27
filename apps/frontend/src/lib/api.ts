@@ -1,5 +1,9 @@
 import type { ProcessingRequest, TranscriptionRequest, TranslationRequest } from "./dictation";
 import type { HistoryEntry, Providers, Settings } from "./types";
+import type { FinishMeeting, MeetingChunk, MeetingResult } from "./meeting-types";
+export class ApiError extends Error {
+  constructor(message: string, public status: number) { super(message); }
+}
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
@@ -22,7 +26,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       /* Proxies may return HTML instead of JSON. */
     }
-    throw new Error(message);
+    throw new ApiError(message, response.status);
   }
   if (response.status === 204) return undefined as T;
   try {
@@ -36,7 +40,26 @@ const json = (method: string, body: unknown): RequestInit => ({
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify(body),
 });
+async function meetingRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const controller = new AbortController();
+  // AbortSignal.timeout is missing on older Safari versions that can still record MP4.
+  const timer = globalThis.setTimeout(() => controller.abort(), 60_000);
+  try { return await request<T>(path, { ...init, signal: controller.signal }); }
+  finally { globalThis.clearTimeout(timer); }
+}
 export const api = {
+  createMeeting: (input: { title?: string; source: "recording"; language: string }) =>
+    meetingRequest<{ id: string }>("/meetings", json("POST", input)),
+  putMeetingChunk: (chunk: MeetingChunk) => meetingRequest<{ ok: true }>(
+    `/meetings/${encodeURIComponent(chunk.meetingId)}/parts/${chunk.part}/chunks/${chunk.index}`,
+    { method: "PUT", headers: { "Content-Type": chunk.contentType }, body: chunk.blob }),
+  finishMeeting: (id: string, input: FinishMeeting) => meetingRequest(`/meetings/${encodeURIComponent(id)}/finish`, json("POST", input)),
+  getMeeting: (id: string) => meetingRequest<MeetingResult>(`/meetings/${encodeURIComponent(id)}`),
+  retryMeeting: (id: string) => meetingRequest(`/meetings/${encodeURIComponent(id)}/retry`, json("POST", {})),
+  deleteMeeting: async (id: string) => {
+    try { await meetingRequest(`/meetings/${encodeURIComponent(id)}`, { method: "DELETE" }); }
+    catch (error) { if (!(error instanceof ApiError && error.status === 404)) throw error; }
+  },
   transcribe: (input: TranscriptionRequest) => {
     const form = new FormData();
     const extension = input.audio.type.includes("mp4") ? "mp4" : input.audio.type.includes("ogg") ? "ogg" : "webm";

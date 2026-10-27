@@ -1,41 +1,98 @@
-import { Circle, Info } from "lucide-react";
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui";
+import { useState } from "react";
+import { Circle, Info, Pause, Play, Square } from "lucide-react";
+import { ConfirmDialog } from "../components/Dialog";
+import { MeetingRecordingResult } from "../components/MeetingRecordingResult";
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Field, Input } from "../components/ui";
+import type { MeetingRecorder, MeetingSnapshot } from "../lib/meeting-recorder";
+import { meetingClock } from "../lib/meeting-types";
 
-// Long session recording (F-006). Layout only in step 1; the chunked,
-// crash-safe recorder and the AssemblyAI job flow follow in a later step.
-export function ProtocolView() {
+interface Props {
+  state: MeetingSnapshot;
+  controller: MeetingRecorder | null;
+  language: string;
+  dictationActive: boolean;
+}
+const statuses = { queued: "Wartet auf Verarbeitung", transcribing: "Wird transkribiert", summarizing: "Protokoll wird erstellt", done: "Fertig", error: "Verarbeitung fehlgeschlagen" };
+export function ProtocolView({ state, controller, language, dictationActive }: Props) {
+  const [title, setTitle] = useState("");
+  const [confirm, setConfirm] = useState<"finish" | "discard" | null>(null);
+  const recovering = state.phase === "recovery" || state.phase === "interrupted";
+  const recording = state.phase === "recording" || state.phase === "paused";
   return (
-    <div className="page-column stack">
-      <Card>
+    <div className="page-column stack meeting-page">
+      {confirm ? <ConfirmDialog title={confirm === "finish" ? "Aufnahme beenden?" : "Aufnahme verwerfen?"}
+        confirmLabel={confirm === "finish" ? "Beenden und verarbeiten" : "Verwerfen"}
+        onClose={() => setConfirm(null)} onConfirm={() => {
+          setConfirm(null); if (confirm === "finish") void controller?.finish(); else void controller?.discard();
+        }}>
+        {confirm === "finish" ? "Alle aufgenommenen Stücke werden gesichert. Danach werden Transkript und Protokoll erstellt." : "Diese Sitzung und die gesicherten Audiostücke werden dauerhaft gelöscht."}
+      </ConfirmDialog> : null}
+      {state.phase === "idle" || state.phase === "loading" || state.phase === "starting" ? <Card>
         <CardHeader>
           <CardTitle>Sitzung aufnehmen</CardTitle>
-          <CardDescription>
-            Nimmt eine Besprechung über das Mikrofon auf, bis zu drei Stunden. Danach folgen Transkript mit
-            Sprecherzuordnung und Protokoll.
-          </CardDescription>
+          <CardDescription>Bis zu drei Stunden aufnehmen. Danach folgen Transkript mit Sprecherzuordnung und Protokoll.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="row" style={{ gap: 12, alignItems: "flex-start" }}>
-            <Info size={16} className="muted" style={{ marginTop: 2, flexShrink: 0 }} />
-            <p className="field-hint">Bitte alle Teilnehmenden vorher über die Aufnahme informieren.</p>
+          <div className="meeting-notice row">
+            <Info size={18} aria-hidden className="muted" />
+            <div className="stack">
+              <p>Bitte alle Teilnehmenden vorher über die Aufnahme informieren.</p>
+              <p>Gerät nahe an die Gesprächsrunde legen und die App geöffnet lassen.</p>
+              {state.isIOS ? <p>Wechsel auf den Homescreen oder Sperren hält die Aufnahme an.</p> : null}
+            </div>
           </div>
+          <Field label="Titel (optional)" htmlFor="meeting-title"><Input id="meeting-title" value={title} maxLength={200} disabled={state.phase !== "idle"} onChange={event => setTitle(event.target.value)} placeholder="z. B. Projektbesprechung" /></Field>
+          <p className="field-hint">Aufnahmesprache: {language === "auto" ? "Automatisch erkennen" : language.toUpperCase()} · entspricht der Auswahl im Diktat-Overlay.</p>
           <div className="stack">
-            <Button disabled aria-describedby="long-recording-hint">
-              <Circle fill="currentColor" /> Aufnahme starten
+            <Button disabled={state.phase !== "idle" || dictationActive || !controller} aria-describedby="meeting-start-hint" onClick={() => { void controller?.start(title, language); }}>
+              <Circle fill="currentColor" aria-hidden /> {state.phase === "starting" ? "Mikrofon wird gestartet …" : "Aufnahme starten"}
             </Button>
-            <p id="long-recording-hint" className="field-hint">Langzeitaufnahme folgt in Etappe 3.</p>
+            <p id="meeting-start-hint" className="field-hint">{dictationActive ? "Bitte zuerst das Diktat beenden." : state.phase === "loading" ? "Lokale Aufnahmen werden geprüft …" : "Die Aufnahme bleibt auch beim Wechsel zu anderen Seiten in dieser App aktiv."}</p>
           </div>
         </CardContent>
-      </Card>
+      </Card> : null}
 
-      <Card>
+      {recovering || recording || state.phase === "finishing" ? <Card>
         <CardHeader>
-          <span className="section-label">Letzte Sitzungen</span>
+          <CardTitle>{state.phase === "interrupted" ? "Unterbrochen" : state.phase === "recovery" ? "Nicht abgeschlossene Aufnahme" : state.phase === "finishing" ? "Aufnahme wird gesichert" : state.phase === "paused" ? "Aufnahme pausiert" : "Aufnahme läuft"}</CardTitle>
+          <CardDescription>{state.meeting?.title || "Sitzung ohne Titel"}</CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="muted">Noch keine Sitzung aufgenommen.</p>
+          <div className="row between wrap">
+            <span className="meeting-time" aria-label="Aufnahmedauer">{meetingClock(state.elapsed)}</span>
+            <div className="meeting-levels" aria-label="Mikrofonpegel" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((state.levels.at(-1) ?? 0) * 100)}>
+              {Array.from({ length: 18 }, (_, index) => <i key={index} style={{ transform: `scaleY(${(4 + (state.levels[index - (18 - state.levels.length)] ?? 0) * 24) / 28})` }} />)}
+            </div>
+          </div>
+          {state.hint ? <p role="status" className="data-notice">{state.hint}</p> : null}
+          {state.wakeHint ? <p className="field-hint">{state.wakeHint}</p> : null}
+          <div className="stack meeting-upload" role="status" aria-live="polite">
+            <p>gesichert bis {meetingClock(state.secured)}</p>
+            <p className="field-hint">{state.offline ? "Offline — die Stücke bleiben lokal gesichert. Der Upload läuft weiter, sobald die Verbindung zurück ist." : state.pending ? `${state.pending} von ${state.total} Stücken warten auf den Upload.` : "Alle bisherigen Stücke sind auf dem Server gesichert."}</p>
+            {state.uploadError && !state.offline ? <p className="field-hint">Upload fehlgeschlagen. Der nächste Versuch folgt automatisch.</p> : null}
+            {state.phase === "finishing" ? <><progress aria-label="Upload-Fortschritt" value={state.total - state.pending} max={Math.max(1, state.total)} /><p className="field-hint">{state.offline ? "Warte auf Verbindung. Bitte diese App geöffnet lassen." : "Die Verarbeitung beginnt, sobald alle Stücke hochgeladen sind."}</p></> : null}
+          </div>
+          {recording ? <div className="row wrap meeting-actions">
+            <Button variant="outline" onClick={() => { if (state.phase === "paused") void controller?.resume(); else void controller?.pause(); }}>
+              {state.phase === "paused" ? <Play aria-hidden /> : <Pause aria-hidden />}{state.phase === "paused" ? "Fortsetzen" : "Pause"}
+            </Button>
+            <Button onClick={() => setConfirm("finish")}><Square aria-hidden />Beenden</Button>
+          </div> : recovering ? <div className="row wrap meeting-actions">
+            <Button disabled={dictationActive || !state.canResume} onClick={() => { void controller?.resume(); }}><Play aria-hidden />Fortsetzen</Button>
+            <Button variant="outline" onClick={() => { void controller?.finish(); }}>Jetzt verarbeiten</Button>
+            <Button variant="ghost" onClick={() => setConfirm("discard")}>Verwerfen</Button>
+            {dictationActive ? <p className="field-hint">Bitte zuerst das Diktat beenden.</p> : null}
+          </div> : null}
         </CardContent>
-      </Card>
+      </Card> : null}
+
+      {state.phase === "processing" ? <Card>
+        <CardHeader><CardTitle>{state.result ? statuses[state.result.status] : statuses.queued}</CardTitle></CardHeader>
+        <CardContent><progress aria-label="Verarbeitungsfortschritt" value={state.result?.progress ?? 0} max={100} /><p className="field-hint">Der Status wird alle fünf Sekunden aktualisiert.</p></CardContent>
+      </Card> : null}
+      {state.error ? <p role="alert" className="form-error">{state.error}</p> : null}
+      {state.phase === "error" && state.result?.status === "error" ? <Button onClick={() => { void controller?.retry(); }}>Erneut versuchen</Button> : null}
+      {state.phase === "done" && state.result ? <><MeetingRecordingResult meeting={state.result} /><Button variant="outline" onClick={() => { void controller?.reset(); }}>Neue Sitzung</Button></> : null}
     </div>
   );
 }

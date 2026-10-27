@@ -32,6 +32,8 @@ interface OverlayBarProps {
   levels: number[];
   busyText: string | null;
   message: OverlayMessage | null;
+  recordingDisabled?: boolean;
+  lockText?: string | null;
   onStart: () => void;
   onStop: () => void;
 }
@@ -67,6 +69,7 @@ export function OverlayBar(props: OverlayBarProps) {
 
   return (
     <div className="overlay" ref={rootRef}>
+      {props.lockText ? <div id="dictation-lock" className="capsule overlay-text" role="status">{props.lockText}</div> : null}
       {menu && !props.recording && !props.busyText ? (
         <div className="capsule overlay-menu" role="menu" aria-label={menu === "language" ? "Aufnahmesprache" : menu === "target" ? "Zielsprache" : "Modus"}>
           {menuOptions.map((option) => (
@@ -134,7 +137,7 @@ export function OverlayBar(props: OverlayBarProps) {
             >
               {activeLanguage?.short ?? "Auto"}<ChevronDown aria-hidden />
             </button>
-            <button type="button" className="capsule overlay-dot" aria-label="Diktat starten" onClick={props.onStart}>
+            <button type="button" className="capsule overlay-dot" aria-label="Diktat starten" disabled={props.recordingDisabled} aria-describedby={props.recordingDisabled ? "dictation-lock" : undefined} onClick={props.onStart}>
               <span className="core" />
             </button>
             <button
