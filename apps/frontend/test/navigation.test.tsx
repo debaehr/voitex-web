@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { SlidersHorizontal } from "lucide-react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { languages } from "../src/App";
 import { navAll, navTop, tabSections } from "../src/lib/nav";
 import { DictationView } from "../src/views/DictationView";
@@ -8,6 +8,11 @@ import { MeetingsView } from "../src/views/MeetingsView";
 import { ModesView } from "../src/views/ModesView";
 import { ProtocolView } from "../src/views/ProtocolView";
 import { initialMeetingSnapshot } from "../src/lib/meeting-recorder";
+
+vi.mock("../src/lib/settings-context", () => ({
+  useSettings: () => ({ settings: null, status: "loading", saving: false, save: vi.fn() }),
+  SettingsNotice: () => null,
+}));
 
 describe("navigation follow-up", () => {
   it("renames recording and upload labels and titles while retaining section ids", () => {
@@ -35,10 +40,11 @@ describe("navigation follow-up", () => {
     expect(html).toContain("App geöffnet lassen");
   });
 
-  it("points upload users to Meetings for recording", () => {
+  it("replaces upload placeholders with the upload form and own-speaker setting", () => {
     const html = renderToStaticMarkup(<MeetingsView />);
-    expect(html).toContain("0 Transkripte · Aufnahme unter „Meetings“");
-    expect(html).toContain("Noch keine Transkripte.");
+    expect(html).toContain("Datei transkribieren");
+    expect(html).toContain("Name der eigenen Stimme");
+    expect(html).toContain("maximal 200 MB");
     expect(html).not.toContain("„Protokoll“");
   });
 

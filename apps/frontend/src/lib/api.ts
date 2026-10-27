@@ -1,6 +1,6 @@
 import type { ProcessingRequest, TranscriptionRequest, TranslationRequest } from "./dictation";
 import type { HistoryEntry, Providers, Settings } from "./types";
-import type { FinishMeeting, MeetingChunk, MeetingResult } from "./meeting-types";
+import type { FinishMeeting, MeetingChunk, MeetingDetailData, MeetingSummary, MeetingProvider } from "./meeting-types";
 export class ApiError extends Error {
   constructor(message: string, public status: number) { super(message); }
 }
@@ -48,14 +48,20 @@ async function meetingRequest<T>(path: string, init?: RequestInit): Promise<T> {
   finally { globalThis.clearTimeout(timer); }
 }
 export const api = {
-  createMeeting: (input: { title?: string; source: "recording"; language: string }) =>
+  createMeeting: (input: { title?: string; source: "recording" | "upload"; language: string; participants?: string[] }) =>
     meetingRequest<{ id: string }>("/meetings", json("POST", input)),
   putMeetingChunk: (chunk: MeetingChunk) => meetingRequest<{ ok: true }>(
     `/meetings/${encodeURIComponent(chunk.meetingId)}/parts/${chunk.part}/chunks/${chunk.index}`,
     { method: "PUT", headers: { "Content-Type": chunk.contentType }, body: chunk.blob }),
   finishMeeting: (id: string, input: FinishMeeting) => meetingRequest(`/meetings/${encodeURIComponent(id)}/finish`, json("POST", input)),
-  getMeeting: (id: string) => meetingRequest<MeetingResult>(`/meetings/${encodeURIComponent(id)}`),
-  retryMeeting: (id: string) => meetingRequest(`/meetings/${encodeURIComponent(id)}/retry`, json("POST", {})),
+  getMeeting: (id: string) => meetingRequest<MeetingDetailData>(`/meetings/${encodeURIComponent(id)}`),
+  listMeetings: () => meetingRequest<MeetingSummary[]>("/meetings"),
+  patchMeeting: (id: string, input: { title?: string; speakerNames?: Record<string, string> }) =>
+    meetingRequest<MeetingDetailData>(`/meetings/${encodeURIComponent(id)}`, json("PATCH", input)),
+  protocolMeeting: (id: string, speakerNames?: Record<string, string>) =>
+    meetingRequest(`/meetings/${encodeURIComponent(id)}/protocol`, speakerNames === undefined ? { method: "POST" } : json("POST", { speakerNames })),
+  deleteMeetingAudio: (id: string) => meetingRequest(`/meetings/${encodeURIComponent(id)}/audio`, { method: "DELETE" }),
+  retryMeeting: (id: string, provider?: MeetingProvider) => meetingRequest(`/meetings/${encodeURIComponent(id)}/retry`, json("POST", provider ? { provider } : {})),
   deleteMeeting: async (id: string) => {
     try { await meetingRequest(`/meetings/${encodeURIComponent(id)}`, { method: "DELETE" }); }
     catch (error) { if (!(error instanceof ApiError && error.status === 404)) throw error; }

@@ -114,14 +114,14 @@ export class MeetingRecorder {
     } catch { this.emit({ wakeHint: "Bildschirm konnte nicht wach gehalten werden. Bitte den Bildschirm anlassen." }); }
     finally { this.wakePending = false; }
   }
-  async start(title: string, language: string) {
+  async start(title: string, language: string, participants: string[] = []) {
     if (this.actionPending || this.snapshot.phase !== "idle" || !this.microphone.acquire("meeting")) return;
     this.actionPending = true; this.emit({ phase: "starting", error: null });
     let capture: MeetingCapture | undefined;
     try {
       capture = await this.environment.openCapture();
       if (this.disposed) { await capture.stop(); return; }
-      const { id } = await this.api.createMeeting({ ...(title.trim() ? { title: title.trim() } : {}), source: "recording", language });
+      const { id } = await this.api.createMeeting({ ...(title.trim() ? { title: title.trim() } : {}), source: "recording", language, ...(participants.length ? { participants } : {}) });
       this.meeting = { id, title: title.trim(), language, parts: [], status: "interrupted" };
       await this.saveMetadata(); this.createQueue();
       await this.beginPart(capture);
@@ -297,17 +297,22 @@ export class MeetingRecorder {
     try {
       const result = await this.api.getMeeting(this.meeting.id);
       if (this.disposed) return;
-      if (result.status === "done") {
-        await this.store.deleteMeeting(this.meeting.id);
-        this.cancelPoll?.(); this.cancelPoll = undefined;
-        await this.queue?.dispose(); this.queue = undefined;
-        this.emit({ phase: "done", result, error: null });
+      if (result.status === "done" || result.status === "naming") {
+        await this.acceptResult(result);
       } else if (result.status === "error") {
         this.cancelPoll?.(); this.cancelPoll = undefined;
         this.emit({ phase: "error", result, error: result.error ?? "Verarbeitung fehlgeschlagen." });
       } else this.emit({ phase: "processing", result, error: null });
     } catch { this.emit({ error: "Status konnte nicht geladen werden. Nächster Versuch in fünf Sekunden." }); }
     finally { this.polling = false; }
+  }
+  // The detail also reports terminal results after a provider-specific retry.
+  async acceptResult(result: MeetingResult) {
+    if (!this.meeting || result.id !== this.meeting.id || !["naming", "done"].includes(result.status)) return;
+    await this.store.deleteMeeting(this.meeting.id);
+    this.cancelPoll?.(); this.cancelPoll = undefined;
+    await this.queue?.dispose(); this.queue = undefined;
+    this.emit({ phase: "done", result, error: null });
   }
   async retry() {
     if (!this.meeting || this.actionPending || this.snapshot.result?.status !== "error") return;
@@ -330,6 +335,15 @@ export class MeetingRecorder {
       this.emit({ error: "Sitzung konnte nicht verworfen werden. Bitte erneut versuchen." });
     }
     finally { this.actionPending = false; }
+  }
+  async forgetDeleted(id: string) {
+    if (!this.meeting || this.meeting.id !== id || !["done", "error"].includes(this.snapshot.phase)) return;
+    this.cancelPoll?.(); this.cancelPoll = undefined;
+    await this.queue?.dispose(); this.queue = undefined;
+    await this.store.deleteMeeting(id);
+    this.meeting = null; this.unsaved.clear();
+    this.emit({ ...initialMeetingSnapshot, phase: "idle" });
+    await this.initialize();
   }
   async reset() {
     if (this.snapshot.phase !== "done") return;

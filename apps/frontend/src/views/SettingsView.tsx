@@ -12,6 +12,8 @@ import {
   Field,
   Input,
   Select,
+  Switch,
+  SettingRow,
   Textarea,
 } from "../components/ui";
 import type { ThemePreference } from "../lib/theme";
@@ -94,7 +96,7 @@ export function SettingsView({
       "mistral",
       "groq",
       ...(providers?.llm ?? []),
-      ...Object.values(draft?.providers ?? {}),
+      ...Object.entries(draft?.providers ?? {}).filter(([key]) => key !== "meetings").map(([, value]) => value),
     ]),
   ];
   function changeProvider(id: string, provider: Provider) {
@@ -253,8 +255,7 @@ export function SettingsView({
           ) : (
             <>
               <p className="muted">
-                Anbieter für Transkription und Umschreiben, je Modus. Meetings
-                laufen immer über AssemblyAI.
+                Anbieter für Transkription und Umschreiben, je Modus und für Meetings.
               </p>
               <Card>
                 <CardHeader>
@@ -264,6 +265,17 @@ export function SettingsView({
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
+                  <Field label="Meetings" htmlFor="provider-meetings">
+                    <Select id="provider-meetings" value={draft.providers.meetings ?? "mistral"}
+                      onChange={event => update({ ...draft, providers: { ...draft.providers, meetings: event.target.value as "mistral" | "assemblyai" } })}>
+                      {(["mistral", "assemblyai"] as const).map(provider => <option key={provider} value={provider} disabled={!providers?.meetings?.includes(provider)}>
+                        {provider === "mistral" ? "Mistral" : "AssemblyAI"}{providers?.meetings?.includes(provider) ? "" : " (kein Schlüssel)"}
+                      </option>)}
+                    </Select>
+                  </Field>
+                  <SettingRow title="Bei Fehler auf AssemblyAI ausweichen" description="Audio geht dann an einen US-Anbieter."
+                    control={<Switch label="Bei Fehler auf AssemblyAI ausweichen" checked={draft.meetingFallback ?? false}
+                      onCheckedChange={checked => update({ ...draft, meetingFallback: checked })} />} />
                   {[...available, ...nonDictationModes.map(mode => ({ ...mode, provider: draft.providers[mode.id] }))].map((mode) => (
                     <Field
                       key={mode.id}

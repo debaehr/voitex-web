@@ -35,7 +35,7 @@ describe("mode drafts and available modes", () => {
     const saved = mergeWithDefaults(defaults, defaults);
     const added = addCustomMode(saved);
     const mode = added.customModes![0];
-    expect(mode).toMatchObject({ label: "", prompt: "", provider: "openai" });
+    expect(mode).toMatchObject({ label: "", prompt: "", provider: "mistral" });
     expect(mode.id).toMatch(/^custom-[0-9a-f-]{36}$/);
     expect(isDirty(saved, added)).toBe(true);
     const edited = updateCustomMode(added, mode.id, { label: "Mail", description: "Customer", prompt: "Write mail", provider: "mistral" });

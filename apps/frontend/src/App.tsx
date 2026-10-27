@@ -25,15 +25,11 @@ import { ProtocolView } from "./views/ProtocolView";
 import { SettingsView } from "./views/SettingsView";
 import { SnippetsView } from "./views/SnippetsView";
 
-export const languages = [
-  { id: "auto", label: "Automatisch erkennen", short: "Auto" },
-  { id: "de", label: "Deutsch (de)", short: "DE" },
-  { id: "en", label: "Englisch (en)", short: "EN" },
-  { id: "hr", label: "Kroatisch (hr)", short: "HR" }
-];
+export { languages } from "./lib/languages";
+import { languages } from "./lib/languages";
 
 // Sections with their own two-level layout fill the page body edge to edge.
-const twoLevelSections: Section[] = ["meetings", "history", "settings"];
+const twoLevelSections: Section[] = ["history", "settings"];
 
 export function App() {
   return (
@@ -212,9 +208,9 @@ function AppContent() {
           {section === "dictation" ? (
             <DictationView lastResult={lastResult ? { text: lastResult.text, meta: resultMeta(lastResult) } : null} onCopy={copy} />
           ) : section === "protocol" ? (
-            <ProtocolView state={meeting.state} controller={meeting.controller} language={language} dictationActive={recording || !!busyText} />
+            <ProtocolView state={meeting.state} controller={meeting.controller} language={language} dictationActive={recording || !!busyText} ownSpeakerName={settings?.ownSpeakerName} />
           ) : section === "meetings" ? (
-            <MeetingsView />
+            <MeetingsView language={language} />
           ) : section === "lexicon" ? (
             <LexiconView />
           ) : section === "snippets" ? (

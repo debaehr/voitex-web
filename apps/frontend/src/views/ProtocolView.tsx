@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Circle, Info, Pause, Play, Square } from "lucide-react";
 import { ConfirmDialog } from "../components/Dialog";
-import { MeetingRecordingResult } from "../components/MeetingRecordingResult";
+import { MeetingSessions } from "../components/MeetingSessions";
+import { parseParticipants } from "../lib/meeting-presentation";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Field, Input } from "../components/ui";
 import type { MeetingRecorder, MeetingSnapshot } from "../lib/meeting-recorder";
 import { meetingClock } from "../lib/meeting-types";
@@ -11,21 +12,24 @@ interface Props {
   controller: MeetingRecorder | null;
   language: string;
   dictationActive: boolean;
+  ownSpeakerName?: string;
 }
-const statuses = { queued: "Wartet auf Verarbeitung", transcribing: "Wird transkribiert", summarizing: "Protokoll wird erstellt", done: "Fertig", error: "Verarbeitung fehlgeschlagen" };
-export function ProtocolView({ state, controller, language, dictationActive }: Props) {
+const statuses = { queued: "Wartet auf Verarbeitung", transcribing: "Wird transkribiert", naming: "Namen zuordnen", summarizing: "Protokoll wird erstellt", done: "Fertig", error: "Verarbeitung fehlgeschlagen" };
+export function ProtocolView({ state, controller, language, dictationActive, ownSpeakerName }: Props) {
   const [title, setTitle] = useState("");
+  const [participants, setParticipants] = useState("");
+  const [inputError, setInputError] = useState("");
   const [confirm, setConfirm] = useState<"finish" | "discard" | null>(null);
   const recovering = state.phase === "recovery" || state.phase === "interrupted";
   const recording = state.phase === "recording" || state.phase === "paused";
   return (
-    <div className="page-column stack meeting-page">
+    <div className="stack meeting-page">
       {confirm ? <ConfirmDialog title={confirm === "finish" ? "Aufnahme beenden?" : "Aufnahme verwerfen?"}
         confirmLabel={confirm === "finish" ? "Beenden und verarbeiten" : "Verwerfen"}
         onClose={() => setConfirm(null)} onConfirm={() => {
           setConfirm(null); if (confirm === "finish") void controller?.finish(); else void controller?.discard();
         }}>
-        {confirm === "finish" ? "Alle aufgenommenen Stücke werden gesichert. Danach werden Transkript und Protokoll erstellt." : "Diese Sitzung und die gesicherten Audiostücke werden dauerhaft gelöscht."}
+        {confirm === "finish" ? "Alle aufgenommenen Stücke werden gesichert. Danach kannst du die Sprecher zuordnen und das Protokoll erstellen." : "Diese Sitzung und die gesicherten Audiostücke werden dauerhaft gelöscht."}
       </ConfirmDialog> : null}
       {state.phase === "idle" || state.phase === "loading" || state.phase === "starting" ? <Card>
         <CardHeader>
@@ -42,9 +46,11 @@ export function ProtocolView({ state, controller, language, dictationActive }: P
             </div>
           </div>
           <Field label="Titel (optional)" htmlFor="meeting-title"><Input id="meeting-title" value={title} maxLength={200} disabled={state.phase !== "idle"} onChange={event => setTitle(event.target.value)} placeholder="z. B. Projektbesprechung" /></Field>
+          <Field label="Teilnehmende (optional)" htmlFor="meeting-participants" hint="Durch Komma getrennt · maximal 20 Namen."><Input id="meeting-participants" value={participants} disabled={state.phase !== "idle"} onChange={event => setParticipants(event.target.value)} /></Field>
+          {inputError && <p role="alert" className="form-error">{inputError}</p>}
           <p className="field-hint">Aufnahmesprache: {language === "auto" ? "Automatisch erkennen" : language.toUpperCase()} · entspricht der Auswahl im Diktat-Overlay.</p>
           <div className="stack">
-            <Button disabled={state.phase !== "idle" || dictationActive || !controller} aria-describedby="meeting-start-hint" onClick={() => { void controller?.start(title, language); }}>
+            <Button disabled={state.phase !== "idle" || dictationActive || !controller} aria-describedby="meeting-start-hint" onClick={() => { try { const names = parseParticipants(participants); setInputError(""); void controller?.start(title, language, names); } catch (reason) { setInputError((reason as Error).message); } }}>
               <Circle fill="currentColor" aria-hidden /> {state.phase === "starting" ? "Mikrofon wird gestartet …" : "Aufnahme starten"}
             </Button>
             <p id="meeting-start-hint" className="field-hint">{dictationActive ? "Bitte zuerst das Diktat beenden." : state.phase === "loading" ? "Lokale Aufnahmen werden geprüft …" : "Die Aufnahme bleibt auch beim Wechsel zu anderen Seiten in dieser App aktiv."}</p>
@@ -90,9 +96,9 @@ export function ProtocolView({ state, controller, language, dictationActive }: P
         <CardHeader><CardTitle>{state.result ? statuses[state.result.status] : statuses.queued}</CardTitle></CardHeader>
         <CardContent><progress aria-label="Verarbeitungsfortschritt" value={state.result?.progress ?? 0} max={100} /><p className="field-hint">Der Status wird alle fünf Sekunden aktualisiert.</p></CardContent>
       </Card> : null}
-      {state.error ? <p role="alert" className="form-error">{state.error}</p> : null}
-      {state.phase === "error" && state.result?.status === "error" ? <Button onClick={() => { void controller?.retry(); }}>Erneut versuchen</Button> : null}
-      {state.phase === "done" && state.result ? <><MeetingRecordingResult meeting={state.result} /><Button variant="outline" onClick={() => { void controller?.reset(); }}>Neue Sitzung</Button></> : null}
+      {state.error && state.result?.status !== "error" ? <p role="alert" className="form-error">{state.error}</p> : null}
+      {state.phase === "done" && state.result ? <Button variant="outline" onClick={() => { void controller?.reset(); }}>Neue Sitzung</Button> : null}
+      <MeetingSessions source="recording" onResult={result => { void controller?.acceptResult(result); }} ownSpeakerName={ownSpeakerName} autoMeeting={state.phase === "done" || state.phase === "error" ? state.result : null} onDeleted={id => { void controller?.forgetDeleted(id); }} />
     </div>
   );
 }

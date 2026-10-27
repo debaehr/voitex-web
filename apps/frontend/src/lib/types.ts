@@ -29,7 +29,8 @@ export interface Snippet {
 }
 export interface Settings {
   version: 1;
-  providers: Record<SettingMode, Provider>;
+  providers: Record<SettingMode, Provider> & { meetings?: "mistral" | "assemblyai" };
+  meetingFallback?: boolean;
   prompts: Record<SettingMode, string>;
   lexicon: LexiconEntry[];
   snippets: Snippet[];

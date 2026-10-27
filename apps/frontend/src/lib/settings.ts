@@ -23,6 +23,9 @@ export function mergeWithDefaults(
       : undefined;
     if (typeof prompt === "string") result.prompts[mode] = prompt;
   }
+  const meetings = isRecord(partial.providers) ? partial.providers.meetings : undefined;
+  if (meetings === "mistral" || meetings === "assemblyai") result.providers.meetings = meetings;
+  if (typeof partial.meetingFallback === "boolean") result.meetingFallback = partial.meetingFallback;
   if (typeof partial.ownSpeakerName === "string")
     result.ownSpeakerName = partial.ownSpeakerName;
   if (Array.isArray(partial.lexicon))

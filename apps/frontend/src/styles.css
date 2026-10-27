@@ -1256,3 +1256,32 @@ textarea {
   .meeting-page input { font-size: 16px; }
   .meeting-page .card-header, .meeting-page .card-content { padding-inline: 16px; }
 }
+
+/* Meeting details share the existing surface and form tokens. */
+.meeting-page, .meeting-sessions, .meeting-detail { min-width: 0; }
+.meeting-page > .card { max-width: 860px; }
+.meeting-sessions .two-level { min-height: 420px; }
+.meeting-sessions .band-item-title { flex-wrap: wrap; gap: 6px; }
+.meeting-detail .card-header { flex-wrap: wrap; }
+.meeting-detail .card-content, .meeting-detail .card-header > div { min-width: 0; }
+.meeting-detail .row.wrap > .btn { white-space: normal; height: auto; min-height: 36px; }
+.meeting-detail audio, .meeting-page progress { width: 100%; max-width: 100%; }
+.meeting-detail a, .meeting-transcript, .meeting-protocol, .speaker-row blockquote { overflow-wrap: anywhere; }
+.meeting-detail .meeting-protocol { white-space: pre-wrap; font: inherit; margin: 0; }
+.meeting-transcript { line-height: 1.65; }
+.meeting-transcript p + p { margin-top: 16px; }
+.speaker-row { border-bottom: 1px solid var(--border); padding-block: 16px; }
+.speaker-row blockquote { margin: 0; color: var(--muted-foreground); font-size: 13px; }
+.meeting-page input[type="file"] { width: 100%; min-width: 0; padding-block: 8px; height: auto; }
+@media (max-width: 767px) {
+  .meeting-sessions .detail-inner { padding: 12px; }
+  .meeting-detail .card-content, .meeting-detail .card-header { padding: 16px; }
+  .meeting-detail .row.wrap { align-items: stretch; }
+}
+.meeting-page { padding: 24px 24px 120px; }
+.meeting-sessions .two-level { height: auto; }
+.meeting-sessions .detail-inner { padding: 16px; }
+@media (max-width: 767px) {
+  .meeting-page { padding: 20px 12px 140px; }
+  .meeting-sessions .detail-inner { padding: 12px 0; }
+}

@@ -22,7 +22,7 @@ export function availableDictationModes(settings: Settings | null): AvailableMod
       ...mode,
       builtin: mode.id,
       prompt: settings?.prompts[mode.id] ?? "",
-      provider: settings?.providers[mode.id] ?? "openai",
+      provider: settings?.providers[mode.id] ?? "mistral",
     })),
     ...(settings?.customModes ?? []).map(mode => ({ ...mode, description: mode.description ?? "" })),
   ];
@@ -36,7 +36,7 @@ export function resolveMode(id: string, modes: Pick<AvailableMode, "id">[]): str
 export function addCustomMode(settings: Settings): Settings {
   if ((settings.customModes?.length ?? 0) >= 20) return settings;
   return { ...settings, customModes: [...(settings.customModes ?? []), {
-    id: `custom-${crypto.randomUUID()}`, label: "", description: "", prompt: "", provider: "openai",
+    id: `custom-${crypto.randomUUID()}`, label: "", description: "", prompt: "", provider: "mistral",
   }] };
 }
 
