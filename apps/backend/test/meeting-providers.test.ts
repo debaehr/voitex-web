@@ -32,7 +32,7 @@ afterEach(async () => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGl
 it("sends diarization, segment timestamps, explicit language, bounded correct lexicon terms and a long timeout", async () => {
   const timeout = vi.spyOn(AbortSignal, "timeout");
   const result = await transcribeMeeting(file, { language: "hr", contentType: "audio/webm", contextBias: ["  Voitex  ", "Voitex", "", ...Array.from({ length: 110 }, (_, n) => `Term${n}`)] });
-  expect(result).toEqual({ provider: "mistral", model: "voxtral-mini-transcribe-3", segments: [{ speaker: "spk_2", start: 0.5, end: 1.5, text: "Hello" }] });
+  expect(result).toEqual({ provider: "mistral", model: "voxtral-mini-transcribe-3", attempts: [{ provider: "mistral", ok: true }], segments: [{ speaker: "spk_2", start: 0.5, end: 1.5, text: "Hello" }] });
   const form = calls[0].init!.body as FormData;
   expect(form.get("model")).toBe("voxtral-mini-transcribe-3"); expect(form.get("diarize")).toBe("true");
   expect(form.get("timestamp_granularities")).toBe("segment"); expect(form.get("language")).toBe("hr");
@@ -49,7 +49,8 @@ it.each(["error", "missing-key", "over-three-hours"])("falls back to AssemblyAI 
   if (reason === "error") mistralError = true;
   if (reason === "missing-key") vi.stubEnv("MISTRAL_API_KEY", "");
   const result = await transcribeMeeting(file, { language: "en", durationSeconds: reason === "over-three-hours" ? 10801 : 3 });
-  expect(result).toEqual({ provider: "assemblyai", model: "universal-2", segments: [{ speaker: "B", start: 0.5, end: 1.5, text: "Hello" }] });
+  expect(result).toMatchObject({ provider: "assemblyai", model: "universal-2", segments: [{ speaker: "B", start: 0.5, end: 1.5, text: "Hello" }] });
+  expect(result.attempts?.[0]).toEqual({ provider: "mistral", ok: false, reason: reason === "error" ? "Mistral: HTTP 500" : reason === "missing-key" ? "Mistral: no API key configured" : "Mistral: duration exceeds 3 hours" });
   expect(calls.some(call => call.url.includes("mistral.ai"))).toBe(reason === "error");
   const body = JSON.parse(calls.find(call => call.url.endsWith("/transcript"))!.init!.body as string);
   expect(body).toMatchObject({ speaker_labels: true, language_code: "en", speech_models: ["universal-2"] });
@@ -96,5 +97,35 @@ it("allows a three-hour polling window then fails without disclosing provider er
   const result = transcribeMeeting(file, { provider: "assemblyai" }).catch(error => error);
   await vi.waitFor(() => expect(calls).toHaveLength(1));
   await vi.advanceTimersByTimeAsync(1000);
-  expect(await result).toEqual(new Error("Meeting transcription failed: no available provider succeeded."));
+  expect((await result).message).toContain("AssemblyAI: transcription timed out");
+});
+
+it("records safe HTTP reasons and logs one line for every failed attempt", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.mocked(fetch).mockImplementation(async url => String(url).includes("mistral.ai")
+    ? json({ error: { type: "invalid_request" }, raw: "never expose this" }, 422)
+    : json({ message: "Bearer dummy-assembly api_key=dummy-mistral sk-fake-secret" }, 401));
+  const error = await transcribeMeeting(file).catch(error => error);
+  expect(error.attempts).toHaveLength(2);
+  expect(error.message).toContain("Mistral: HTTP 422 (invalid_request)");
+  expect(error.message).toContain("AssemblyAI: HTTP 401");
+  expect(log).toHaveBeenCalledTimes(2);
+  const exposed = JSON.stringify([error.message, error.attempts, log.mock.calls]);
+  for (const secret of ["dummy-assembly", "dummy-mistral", "sk-fake-secret", "never expose this"]) expect(exposed).not.toContain(secret);
+});
+it("retains the failed Mistral reason on a successful fallback", async () => {
+  mistralError = true;
+  const result = await transcribeMeeting(file);
+  expect(result.attempts).toEqual([{ provider: "mistral", ok: false, reason: "Mistral: HTTP 500" }, { provider: "assemblyai", ok: true }]);
+});
+it.each(["upload", "transcript", "poll"])("diagnoses AssemblyAI failures during %s", async stage => {
+  vi.stubEnv("MISTRAL_API_KEY", "");
+  vi.mocked(fetch).mockImplementation(async url => {
+    const path = String(url);
+    if (stage === "upload" || (stage === "transcript" && path.endsWith("/transcript"))) return json({ code: "invalid_request" }, 422);
+    if (path.endsWith("/upload")) return json({ upload_url: "https://mock/upload" });
+    if (path.endsWith("/transcript")) return json({ id: "job" });
+    return json({ status: "error", error: "invalid_audio" });
+  });
+  await expect(transcribeMeeting(file, { provider: "assemblyai" })).rejects.toThrow(stage === "poll" ? "HTTP 200 (invalid_audio)" : "HTTP 422 (invalid_request)");
 });

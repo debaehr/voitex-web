@@ -65,8 +65,8 @@ ausstehend: Live-Abnahme durch den Menschen (A4 der Specs), danach `verification
   Aufnahmesprache + Kroatisch, Standard DE (Entscheidung Mensch).
 - [x] F-013 eigene Modi umgesetzt und abgenommen (27.10.).
   Datensicherung vor Deploy: `~/backup/voitex-web-data-<zeitstempel>/`.
-- [ ] Etappe 3 Lauf 1 (Backend Meetings) committet, noch nicht deployt; Nachbesserung
-  Fehler-Logging im Fallback läuft; danach Live-Probe 1b mit echten Schlüsseln.
+- [ ] Etappe 3 Lauf 1 (Backend Meetings) + Fallback-Diagnose committet und deployt;
+  nächster Schritt Live-Probe 1b mit echten Schlüsseln (Mensch liefert).
   Befund für Lauf 3: `mergeWithDefaults` übernimmt `providers.meetings` noch nicht.
 - [ ] Weitere Wünsche (27.10.):
   - Neu gewünscht: Übersetzer (V2T hatte nur „nach Englisch“). Overlay mit 3 Schaltern:

@@ -8,6 +8,8 @@ vi.mock("../src/providers/meetings.js", async original => ({ ...await original<t
 vi.mock("../src/providers/index.js", async original => ({ ...await original<typeof import("../src/providers/index.js")>(), processTranscript }));
 import { createApp } from "../src/app.js";
 import { AUDIO_RETENTION_MS, MeetingService } from "../src/meetings.js";
+import { MeetingTranscriptionError } from "../src/providers/meetings.js";
+import { providerError } from "../src/providers/meeting-diagnostics.js";
 import { defaultPrompts } from "../src/prompts.js";
 import * as persistence from "../src/persistence.js";
 
@@ -279,4 +281,22 @@ it.each([undefined, "mistral", "assemblyai", "openai", null])("validates the opt
   const response = await request("/settings", "PUT", settings);
   expect(response.status).toBe(provider === "openai" || provider === null ? 400 : 200);
   if (response.ok) expect(await (await request("/settings")).json()).toEqual(settings);
+});
+
+it.each([true, false])("persists safe provider attempts and exposes them through the API (success=%s)", async success => {
+  const secret = "fake-provider-key-123456789";
+  vi.stubEnv("MISTRAL_API_KEY", secret);
+  const attempts = [{ provider: "mistral" as const, ok: false, reason: providerError("Mistral", 422, { message: `invalid_request Bearer ${secret}` }).message },
+    { provider: "assemblyai" as const, ok: success, ...(success ? {} : { reason: "AssemblyAI: no API key configured" }) }];
+  if (success) transcribeMeeting.mockResolvedValue({ provider: "assemblyai", model: "test", segments: [{ speaker: "A", start: 0, end: 1, text: "Hello" }], attempts });
+  else transcribeMeeting.mockRejectedValue(new MeetingTranscriptionError(attempts));
+  const { create, chunk, finish, request } = await start(); const id = await create(); await chunk(id);
+  const meeting = await finish(id);
+  expect(meeting.providerAttempts).toEqual(attempts);
+  expect(meeting.status).toBe(success ? "done" : "error");
+  if (!success) { expect(meeting.error).toContain("Mistral: HTTP 422"); expect(meeting.error).toContain("AssemblyAI: no API key configured"); }
+  const stored = await readFile(join(dir, "meetings", id, "meeting.json"), "utf8");
+  const response = await (await request(`/meetings/${id}`)).text();
+  expect(JSON.parse(stored).providerAttempts).toEqual(attempts);
+  expect(response).toContain("providerAttempts"); expect(stored + response).not.toContain(secret);
 });

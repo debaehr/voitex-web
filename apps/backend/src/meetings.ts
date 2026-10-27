@@ -3,7 +3,7 @@ import { mkdir, readdir, readFile, open, rename, rm, stat } from "node:fs/promis
 import { join } from "node:path";
 import { readJsonFile, withFileLock, writeJsonFile } from "./persistence.js";
 import { isProvider, processTranscript } from "./providers/index.js";
-import { transcribeMeeting, type MeetingProvider, type MeetingSegment } from "./providers/meetings.js";
+import { transcribeMeeting, MeetingTranscriptionError, type ProviderAttempt, type MeetingProvider, type MeetingSegment } from "./providers/meetings.js";
 import { defaultPrompts } from "./prompts.js";
 
 export const CHUNK_LIMIT_BYTES = 10 * 1024 * 1024;
@@ -27,6 +27,7 @@ export type Meeting = {
   id: string; title: string; source: "recording" | "upload"; language: string;
   createdAt: string; updatedAt: string; finishedAt?: string; completedAt?: string;
   status: MeetingStatus; progress: number; error?: string;
+  providerAttempts?: ProviderAttempt[];
   parts: MeetingPart[]; durationSeconds?: number;
   segments: DisplaySegment[]; speakerNames: Record<string, string>;
   interruptions: Array<{ afterPart: number; start: string; end: string; text: string }>;
@@ -313,7 +314,7 @@ export class MeetingService {
       let meeting = await this.get(id); phase = meeting.job ?? "transcribe";
       if (phase === "transcribe") {
         await this.concatenate(id);
-        await this.change(id, current => { current.status = "transcribing"; current.progress = 0; current.segments = []; current.interruptions = []; });
+        await this.change(id, current => { current.status = "transcribing"; current.progress = 0; current.segments = []; current.interruptions = []; current.providerAttempts = []; });
         meeting = await this.get(id);
         const settings = await this.settings();
         const contextBias = Array.isArray(settings.lexicon) ? settings.lexicon.flatMap((entry: unknown) =>
@@ -333,6 +334,8 @@ export class MeetingService {
               speakerLabel: part.part > 1 ? `Teil ${part.part} · ${label}` : label };
           });
           await this.change(id, current => {
+            current.providerAttempts ??= [];
+            current.providerAttempts.push(...(result.attempts ?? []));
             current.segments.push(...segments); current.provider = result.provider; current.model = result.model;
             const storedPart = current.parts.find(item => item.part === part.part)!;
             storedPart.provider = result.provider; storedPart.model = result.model;
@@ -371,7 +374,11 @@ export class MeetingService {
       try {
         await this.change(id, current => {
           current.status = "error";
-          current.error = error instanceof MeetingError ? error.message : phase === "transcribe" ? "Meeting transcription failed." : "Meeting protocol generation failed.";
+          if (error instanceof MeetingTranscriptionError) {
+            current.providerAttempts ??= [];
+            current.providerAttempts.push(...error.attempts);
+          }
+          current.error = error instanceof MeetingTranscriptionError ? error.message : error instanceof MeetingError ? error.message : phase === "transcribe" ? "Meeting transcription failed." : "Meeting protocol generation failed.";
         });
       } catch (failure) { if (!(failure instanceof MeetingError && failure.status === 404)) throw failure; }
     }

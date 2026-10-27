@@ -1,3 +1,4 @@
+import { httpProviderError, ProviderDiagnosticError, safeDiagnostic } from "./meeting-diagnostics.js";
 import { meetingRequest } from "./meeting-http.js";
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
@@ -5,7 +6,16 @@ import { transcribeMeeting as transcribeAssemblyAI } from "./assemblyai.js";
 
 export type MeetingProvider = "mistral" | "assemblyai";
 export type MeetingSegment = { speaker: string; start: number; end: number; text: string };
-export type MeetingTranscription = { provider: MeetingProvider; model: string; segments: MeetingSegment[] };
+export type ProviderAttempt = { provider: MeetingProvider; ok: boolean; reason?: string };
+export type MeetingTranscription = { provider: MeetingProvider; model: string; segments: MeetingSegment[]; attempts?: ProviderAttempt[] };
+export class MeetingTranscriptionError extends Error {
+  public attempts: ProviderAttempt[];
+  constructor(attempts: ProviderAttempt[]) {
+    const safe = attempts.map(attempt => ({ ...attempt, ...(attempt.reason ? { reason: safeDiagnostic(attempt.reason) } : {}) }));
+    super(`Meeting transcription failed: no available provider succeeded. ${safe.map(attempt => attempt.reason).filter(Boolean).join("; ")}`);
+    this.attempts = safe;
+  }
+}
 export type MeetingTranscriptionOptions = {
   language?: string;
   contextBias?: string[];
@@ -23,23 +33,32 @@ export function availableMeetingProviders(): MeetingProvider[] {
 export async function transcribeMeeting(filePath: string, options: MeetingTranscriptionOptions = {}): Promise<MeetingTranscription> {
   const preferred = options.provider ?? "mistral";
   const order: MeetingProvider[] = preferred === "assemblyai" ? ["assemblyai", "mistral"] : ["mistral", "assemblyai"];
+  const attempts: ProviderAttempt[] = [];
   for (const provider of order) {
     // Voxtral accepts at most three hours per request, including as a fallback.
-    if (provider === "mistral" && (options.durationSeconds ?? 0) > 3 * 60 * 60) continue;
-    if (!availableMeetingProviders().includes(provider)) continue;
+    if (provider === "mistral" && (options.durationSeconds ?? 0) > 3 * 60 * 60) {
+      attempts.push({ provider, ok: false, reason: "Mistral: duration exceeds 3 hours" }); continue;
+    }
+    if (!availableMeetingProviders().includes(provider)) {
+      attempts.push({ provider, ok: false, reason: `${provider === "mistral" ? "Mistral" : "AssemblyAI"}: no API key configured` }); continue;
+    }
     try {
       const result = provider === "mistral" ? await transcribeMistral(filePath, options) : await transcribeAssemblyAI(filePath, options);
       if (!result.segments.length || !result.segments.every(segment =>
         typeof segment.speaker === "string" && typeof segment.text === "string" &&
         Number.isFinite(segment.start) && Number.isFinite(segment.end) && segment.start >= 0 && segment.end >= segment.start)) {
-        throw new Error("Invalid meeting transcription response.");
+        throw new ProviderDiagnosticError(`${provider}: invalid meeting transcription response`);
       }
-      return result;
-    } catch {
-      // Provider bodies can contain credentials. Only a stable public reason leaves this boundary.
+      attempts.push({ provider, ok: true });
+      return { ...result, attempts };
+    } catch (error) {
+      // Arbitrary transport/parse errors can contain request data; expose only known diagnostics.
+      const reason = safeDiagnostic(error instanceof ProviderDiagnosticError ? error.message : `${provider}: request or response processing failed`);
+      console.error(reason);
+      attempts.push({ provider, ok: false, reason });
     }
   }
-  throw new Error("Meeting transcription failed: no available provider succeeded.");
+  throw new MeetingTranscriptionError(attempts);
 }
 
 async function transcribeMistral(filePath: string, options: MeetingTranscriptionOptions): Promise<MeetingTranscription> {
@@ -57,7 +76,7 @@ async function transcribeMistral(filePath: string, options: MeetingTranscription
     method: "POST", headers: { Authorization: `Bearer ${process.env.MISTRAL_API_KEY}` },
     body: form, signal: AbortSignal.timeout(30 * 60 * 1000)
   });
-  if (!response.ok) throw new Error("Mistral transcription failed.");
+  if (!response.ok) throw await httpProviderError("Mistral", response);
   const result = await response.json() as { segments: Array<{ speaker_id: string | number; start: number; end: number; text: string }> };
   return { provider: "mistral", model, segments: result.segments.map(segment => ({
     speaker: String(segment.speaker_id ?? "unknown"), start: segment.start, end: segment.end, text: segment.text

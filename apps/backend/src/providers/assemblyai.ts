@@ -1,3 +1,4 @@
+import { httpProviderError, providerError, ProviderDiagnosticError } from "./meeting-diagnostics.js";
 import { meetingRequest } from "./meeting-http.js";
 import { readFile } from "node:fs/promises";
 import type { MeetingTranscription, MeetingTranscriptionOptions } from "./meetings.js";
@@ -31,7 +32,7 @@ async function uploadAudio(apiKey: string, buffer: Buffer, contentType?: string)
     method: "POST", headers: { Authorization: apiKey, "Content-Type": contentType || "application/octet-stream" },
     body: buffer, signal: AbortSignal.timeout(30 * 60 * 1000)
   });
-  if (!response.ok) throw new Error("AssemblyAI upload failed.");
+  if (!response.ok) throw await httpProviderError("AssemblyAI", response);
   return (await response.json() as { upload_url: string }).upload_url;
 }
 async function createTranscript(apiKey: string, audioUrl: string, model: string, language?: string) {
@@ -42,7 +43,7 @@ async function createTranscript(apiKey: string, audioUrl: string, model: string,
       ...(language && language !== "auto" ? { language_code: language } : { language_detection: true })
     }), signal: AbortSignal.timeout(60 * 1000)
   });
-  if (!response.ok) throw new Error("AssemblyAI transcription failed.");
+  if (!response.ok) throw await httpProviderError("AssemblyAI", response);
   return (await response.json() as TranscriptResponse).id;
 }
 async function pollTranscript(apiKey: string, transcriptId: string) {
@@ -51,11 +52,11 @@ async function pollTranscript(apiKey: string, transcriptId: string) {
     const response = await meetingRequest(`${baseUrl}/v2/transcript/${encodeURIComponent(transcriptId)}`, {
       headers: { Authorization: apiKey }, signal: AbortSignal.timeout(Math.min(60 * 1000, Math.max(1, deadline - Date.now())))
     });
-    if (!response.ok) throw new Error("AssemblyAI polling failed.");
+    if (!response.ok) throw await httpProviderError("AssemblyAI", response);
     const data = await response.json() as TranscriptResponse;
     if (data.status === "completed") return data;
-    if (data.status === "error") throw new Error("AssemblyAI transcription failed.");
+    if (data.status === "error") throw providerError("AssemblyAI", response.status, data);
     await new Promise(resolve => setTimeout(resolve, Math.min(3000, Math.max(0, deadline - Date.now()))));
   }
-  throw new Error("AssemblyAI transcription timed out.");
+  throw new ProviderDiagnosticError("AssemblyAI: transcription timed out");
 }
