@@ -72,7 +72,9 @@ nächster Schritt Lauf 3 (Frontend Ergebnis, Sprecher zuordnen, Upload, Einstell
 - [x] Lauf 2 Frontend Aufnahme (27.10.): `lib/meeting-*.ts`, `useMeetingRecorder.ts`, `views/ProtocolView.tsx`; 133 Frontend-Tests.
   Ergebnisansicht nach `done` ist nur Klartext (`components/MeetingRecordingResult.tsx`) → Lauf 3.
 - [x] Lauf 2b Backend F-014/v3 + AssemblyAI-Fix (27.10.), Probe in `specs/F-006/plan.md`.
-- [ ] Lauf 3 Ergebnis + Sprecher zuordnen + Upload + Einstellungen, Lauf 4 Abnahme.
+- [ ] Lauf 3 Ergebnis + Sprecher zuordnen + Upload + Einstellungen (läuft), Lauf 4 Abnahme.
+- [ ] Danach Lauf 3b: Original-Icon + Anbieter-Listen nur mit Schlüssel, ungültige markieren
+  (`specs/changes/2026-10-27-icon-anbieter.md`, freigegeben 27.10.).
 - [x] `settings.json` auf Mistral umgestellt (Lead, 27.10.; Sicherung `~/backup/voitex-web-data-*`).
   Achtung: Ein offener Browser-Tab mit altem Stand kann beim Speichern zurückschreiben.
 - [ ] Weitere Wünsche (27.10.):
