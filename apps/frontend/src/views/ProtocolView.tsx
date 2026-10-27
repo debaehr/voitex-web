@@ -1,13 +1,9 @@
 import { Circle, Info } from "lucide-react";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui";
 
-interface ProtocolViewProps {
-  onStart: () => void;
-}
-
 // Long session recording (F-006). Layout only in step 1; the chunked,
 // crash-safe recorder and the AssemblyAI job flow follow in a later step.
-export function ProtocolView({ onStart }: ProtocolViewProps) {
+export function ProtocolView() {
   return (
     <div className="page-column stack">
       <Card>
@@ -23,10 +19,11 @@ export function ProtocolView({ onStart }: ProtocolViewProps) {
             <Info size={16} className="muted" style={{ marginTop: 2, flexShrink: 0 }} />
             <p className="field-hint">Bitte alle Teilnehmenden vorher über die Aufnahme informieren.</p>
           </div>
-          <div>
-            <Button onClick={onStart}>
+          <div className="stack">
+            <Button disabled aria-describedby="long-recording-hint">
               <Circle fill="currentColor" /> Aufnahme starten
             </Button>
+            <p id="long-recording-hint" className="field-hint">Langzeitaufnahme folgt in Etappe 3.</p>
           </div>
         </CardContent>
       </Card>

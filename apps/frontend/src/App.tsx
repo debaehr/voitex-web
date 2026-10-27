@@ -12,9 +12,10 @@ import { SettingsProvider, useSettings } from "./lib/settings-context";
 import { cx } from "./components/ui";
 import { navAll, navBottom, navTop, tabSections, type NavEntry, type Section } from "./lib/nav";
 import { useTheme } from "./lib/theme";
-import { DictationView, type ModeInfo } from "./views/DictationView";
+import { DictationView } from "./views/DictationView";
 import { HistoryView } from "./views/HistoryView";
 import { LexiconView } from "./views/LexiconView";
+import { ModesView, type ModeInfo } from "./views/ModesView";
 import { MeetingsView } from "./views/MeetingsView";
 import { ProtocolView } from "./views/ProtocolView";
 import { SettingsView } from "./views/SettingsView";
@@ -27,10 +28,11 @@ const modes: ModeInfo[] = [
   { id: "coding", label: "Coding", description: "Präzise Anweisung für Coding-Agenten." }
 ];
 
-const languages = [
+export const languages = [
   { id: "auto", label: "Automatisch erkennen", short: "Auto" },
   { id: "de", label: "Deutsch (de)", short: "DE" },
-  { id: "en", label: "Englisch (en)", short: "EN" }
+  { id: "en", label: "Englisch (en)", short: "EN" },
+  { id: "hr", label: "Kroatisch (hr)", short: "HR" }
 ];
 
 // Sections with their own two-level layout fill the page body edge to edge.
@@ -194,15 +196,17 @@ function AppContent() {
 
         <div className="page-body" style={isTwoLevel ? { overflow: "hidden" } : undefined}>
           {section === "dictation" ? (
-            <DictationView modes={modes} activeMode={mode} onModeChange={setMode} lastResult={lastResult ? { text: lastResult.text, meta: `${modeLabels[lastResult.mode]} · ${lastResult.provider} · ${lastResult.durationSeconds.toFixed(1)} s` } : null} onCopy={copy} />
+            <DictationView lastResult={lastResult ? { text: lastResult.text, meta: `${modeLabels[lastResult.mode]} · ${lastResult.provider} · ${lastResult.durationSeconds.toFixed(1)} s` } : null} onCopy={copy} />
           ) : section === "protocol" ? (
-            <ProtocolView onStart={() => showMessage({ kind: "info", text: "Langzeitaufnahme folgt in einer späteren Etappe." })} />
+            <ProtocolView />
           ) : section === "meetings" ? (
             <MeetingsView />
           ) : section === "lexicon" ? (
             <LexiconView />
           ) : section === "snippets" ? (
             <SnippetsView />
+          ) : section === "modes" ? (
+            <ModesView modes={modes} activeMode={mode} onModeChange={setMode} />
           ) : section === "history" ? (
             <HistoryView />
           ) : (

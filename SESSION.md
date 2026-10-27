@@ -58,13 +58,12 @@ ausstehend: Live-Abnahme durch den Menschen (A4 der Specs), danach `verification
 <!-- Geordnet nach Priorität. Erledigtes abhaken, nicht löschen,
      bis es nach DECISIONS_LOG.md archiviert wird. -->
 
-- [ ] Befunde aus der Live-Abnahme Etappe 2 (Mensch, 27.10.2026), noch nicht umgesetzt:
-  - Menü umbenennen: „Protokoll“ → „Meetings“ (Live-Aufnahme), „Meetings“ → „Transkript“
-    (Datei-Upload). Betrifft `apps/frontend/src/lib/nav.ts`, Seitentitel, Texte.
-  - „Aufnahme starten“ unter Protokoll ohne Funktion — erwartet, Langzeitaufnahme (F-006)
-    ist Etappe 3; bis dahin Knopf deaktivieren oder klar als „folgt“ kennzeichnen.
-  - Hinweisbox oben im Diktat entfernen (`apps/frontend/src/views/DictationView.tsx:21-25`).
-  - Sprachwahl im Overlay: Antwort gegeben (siehe Chat 27.10.); Entscheidung offen, §6.
+- [x] Befunde aus der Live-Abnahme Etappe 2 (Mensch, 27.10.2026) umgesetzt (Codex-Lauf,
+  27.10.): Menü „Protokoll“→„Meetings“, „Meetings“→„Transkript“ (interne Section-IDs
+  `protocol`/`meetings` unverändert); „Aufnahme starten“ deaktiviert mit Hinweis; Hinweisbox
+  im Diktat entfernt; Modi als eigener Menüpunkt `modes` (Handy: unter „Mehr“);
+  Aufnahmesprache + Kroatisch, Standard DE (Entscheidung Mensch).
+- [ ] Weitere Wünsche (27.10.):
   - Neu gewünscht: Übersetzer (V2T hatte nur „nach Englisch“). Overlay mit 3 Schaltern:
     links Aufnahmesprache, rechts **Zielsprache** (mind. DE, EN, HR); Modus-Schalter wandert
     über den Aufnahmeknopf. Aufnahmesprache um Kroatisch (`hr`) ergänzen. Neues Feature
@@ -116,7 +115,7 @@ ausstehend: Live-Abnahme durch den Menschen (A4 der Specs), danach `verification
 <!-- Echte Blocker, die ein Agent nicht selbst entscheiden darf.
      Leer lassen, wenn keine. -->
 
-- Sprachwahl im Overlay behalten, auf „Auto“ als Standard stellen oder entfernen?
+- Freigabe Spec `specs/F-012/spec.md` (Übersetzer) inkl. Frage F1 (Snippets übersetzen?).
 
 ---
 

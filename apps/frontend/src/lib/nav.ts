@@ -1,6 +1,6 @@
-import { BookOpen, FileText, History, Mic, NotebookPen, Settings, Users, type LucideIcon } from "lucide-react";
+import { BookOpen, FileText, History, Mic, NotebookPen, Settings, SlidersHorizontal, Users, type LucideIcon } from "lucide-react";
 
-export type Section = "dictation" | "protocol" | "meetings" | "lexicon" | "snippets" | "history" | "settings";
+export type Section = "dictation" | "protocol" | "meetings" | "lexicon" | "snippets" | "modes" | "history" | "settings";
 
 export interface NavEntry {
   id: Section;
@@ -11,10 +11,11 @@ export interface NavEntry {
 
 export const navTop: NavEntry[] = [
   { id: "dictation", label: "Diktat", title: "Diktat", icon: Mic },
-  { id: "protocol", label: "Protokoll", title: "Protokoll", icon: NotebookPen },
-  { id: "meetings", label: "Meetings", title: "Meetings", icon: Users },
+  { id: "protocol", label: "Meetings", title: "Meetings", icon: NotebookPen },
+  { id: "meetings", label: "Transkript", title: "Transkript", icon: Users },
   { id: "lexicon", label: "Lexikon", title: "Lexikon", icon: BookOpen },
   { id: "snippets", label: "Snippets", title: "Snippets", icon: FileText },
+  { id: "modes", label: "Modi", title: "Modi", icon: SlidersHorizontal },
   { id: "history", label: "Verlauf", title: "Verlauf", icon: History }
 ];
 

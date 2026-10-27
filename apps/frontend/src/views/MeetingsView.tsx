@@ -21,10 +21,10 @@ export function MeetingsView() {
           <Button variant="outline" block>
             Datei transkribieren …
           </Button>
-          <span className="field-hint">0 Meetings · Aufnahme unter „Protokoll“</span>
+          <span className="field-hint">0 Transkripte · Aufnahme unter „Meetings“</span>
         </div>
       }
-      empty="Noch keine Meetings. Lade eine Audiodatei hoch oder nimm unter „Protokoll“ eine Sitzung auf."
+      empty="Noch keine Transkripte. Lade eine Audiodatei hoch oder nimm unter „Meetings“ eine Sitzung auf."
     >
       {activeId === "prompt" ? (
         <Card>
