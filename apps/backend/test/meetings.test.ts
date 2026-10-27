@@ -39,14 +39,14 @@ async function start(options: { resumeMeetingJobs?: boolean; meetingRetentionTim
   await new Promise<void>(resolve => server.once("listening", resolve));
   const address = server.address(); if (!address || typeof address === "string") throw Error("address");
   const base = `http://127.0.0.1:${address.port}`;
-  const request = (path: string, method = "GET", body?: unknown) => fetch(base + "/api" + path, {
-    method, ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+  const request = (path: string, method = "GET", body?: unknown, headers: Record<string, string> = {}) => fetch(base + "/api" + path, {
+    method, headers: { ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...headers }, ...(body === undefined ? {} : { body: JSON.stringify(body) })
   });
   const chunk = (id: string, part = 1, n = 0, body: BodyInit = "audio", type = "audio/webm") => fetch(`${base}/api/meetings/${id}/parts/${part}/chunks/${n}`, {
     method: "PUT", headers: { "Content-Type": type }, body
   });
-  const create = async (source = "recording") => {
-    const response = await request("/meetings", "POST", { source, language: "de", title: "Meeting" });
+  const create = async (source = "recording", fields = {}) => {
+    const response = await request("/meetings", "POST", { source, language: "de", title: "Meeting", ...fields });
     expect(response.status).toBe(201); return (await response.json()).id as string;
   };
   const finish = async (id: string, body: unknown = {}) => { expect((await request(`/meetings/${id}/finish`, "POST", body)).status).toBe(202); await service.idle(); return await service.get(id); };
@@ -66,11 +66,11 @@ describe("meeting HTTP contract and storage", () => {
     await Promise.all([chunk(id, 1, 2, "C"), chunk(id, 1, 0, "old"), chunk(id, 1, 1, "B")]);
     expect((await chunk(id, 1, 0, "A")).status).toBe(200);
     const meeting = await finish(id, { parts: [{ part: 1, chunkCount: 3 }] });
-    expect(meeting.status).toBe("done");
+    expect(meeting.status).toBe("naming");
     const audio = await request(`/meetings/${id}/audio?part=1`);
     expect(audio.headers.get("content-type")).toBe("audio/webm"); expect(await audio.text()).toBe("ABC");
     expect((await chunk(id, 1, 3, "late")).status).toBe(409);
-    const detail = await (await request(`/meetings/${id}`)).json(); expect(detail.protocol).toBe("Protocol");
+    const detail = await (await request(`/meetings/${id}`)).json(); expect(detail.protocol).toBe("");
     const list = await (await request("/meetings")).json(); expect(list).toHaveLength(1);
     for (const field of ["parts", "segments", "speakerNames", "protocol", "transcript"]) expect(list[0]).not.toHaveProperty(field);
     expect(JSON.parse(await readFile(join(dir, "meetings", id, "meeting.json"), "utf8"))).toEqual(await service.get(id));
@@ -143,10 +143,14 @@ describe("meeting jobs", () => {
       if (path.endsWith("meeting.json")) statuses.push((data as { status: string }).status);
       return write(path, data);
     });
-    const { create, chunk, finish } = await start(); const id = await create(source); await chunk(id);
-    const meeting = await finish(id, { durationSeconds: 10801 });
+    const { create, chunk, finish, request, service } = await start(); const id = await create(source); await chunk(id);
+    let meeting = await finish(id, { durationSeconds: 10801 });
+    expect(meeting.status).toBe("naming"); expect(meeting.progress).toBe(100);
+    expect(processTranscript).not.toHaveBeenCalled();
+    expect((await request(`/meetings/${id}/protocol`, "POST")).status).toBe(202);
+    await service.idle(); meeting = await service.get(id);
     expect(meeting.durationSeconds).toBe(10801);
-    expect(statuses.filter((status, n) => n === 0 || statuses[n - 1] !== status)).toEqual(["queued", "transcribing", "summarizing", "done"]);
+    expect(statuses.filter((status, n) => n === 0 || statuses[n - 1] !== status)).toEqual(["queued", "transcribing", "naming", "queued", "summarizing", "done"]);
     const task = source === "recording" ? "protocol" : "summary";
     expect(processTranscript).toHaveBeenCalledWith(task === "protocol" ? "groq" : "mistral", expect.objectContaining({ task, instructions: `Custom ${task}` }));
     expect(transcribeMeeting).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ language: "de", contextBias: ["Voitex"], durationSeconds: 10801, provider: "assemblyai" }));
@@ -163,7 +167,7 @@ describe("meeting jobs", () => {
     expect(transcribeMeeting).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ provider: "mistral" }));
     expect(meeting.segments.map(segment => segment.speakerLabel)).toEqual(["Sprecher 1", "Sprecher 2", "Sprecher 1", "Teil 2 · Sprecher 1", "Teil 2 · Sprecher 2", "Teil 2 · Sprecher 1"]);
     expect(meeting.segments[0]).toMatchObject({ speaker: "raw-B", speakerId: "1:raw-B" });
-    expect(meeting.transcript).toContain("[Unterbrechung 10:00–10:02]"); expect(meeting.durationSeconds).toBe(6);
+    expect(meeting.transcript).toContain("[Unterbrechung 11:00–11:02]"); expect(meeting.durationSeconds).toBe(6);
     expect((await request(`/meetings/${id}`, "PATCH", { title: "Renamed", speakerNames: { "1:raw-B": "Anna", "2:raw-A": "Anna" } })).status).toBe(200);
     meeting = await service.get(id); expect(meeting.title).toBe("Renamed"); expect(meeting.transcript.match(/Anna:/g)).toHaveLength(3);
     expect(meeting.segments[0].speaker).toBe("raw-B");
@@ -182,8 +186,9 @@ describe("meeting jobs", () => {
     expect(processTranscript).not.toHaveBeenCalled();
   });
   it("uses the default prompts when settings are absent", async () => {
-    const { create, chunk, finish } = await start(); const id = await create(); await chunk(id); await finish(id);
-    expect(processTranscript).toHaveBeenCalledWith("openai", expect.objectContaining({ instructions: defaultPrompts.protocol }));
+    const { create, chunk, finish, request, service } = await start(); const id = await create(); await chunk(id); await finish(id);
+    expect((await request(`/meetings/${id}/protocol`, "POST")).status).toBe(202); await service.idle();
+    expect(processTranscript).toHaveBeenCalledWith("mistral", expect.objectContaining({ instructions: defaultPrompts.protocol }));
   });
   it("sanitizes errors, retries with the other provider, and reuses transcription for a failed protocol", async () => {
     transcribeMeeting.mockRejectedValueOnce(new Error("secret-upstream-key"));
@@ -212,7 +217,7 @@ describe("meeting jobs", () => {
     expect((await request(`/meetings/${ids[0]}/protocol`, "POST", {})).status).toBe(409);
     expect((await request(`/meetings/${ids[0]}/retry`, "POST", {})).status).toBe(409);
     release(); await service.idle(); expect(transcribeMeeting).toHaveBeenCalledTimes(4);
-    for (const id of ids) expect((await service.get(id)).status).toBe("done");
+    for (const id of ids) expect((await service.get(id)).status).toBe("naming");
   });
   it.each(["queued", "transcribing", "summarizing"])("resumes a persisted %s job only when enabled", async status => {
     const first = await start(); const id = await first.create(); await first.chunk(id);
@@ -222,7 +227,7 @@ describe("meeting jobs", () => {
     await first.service.dispose(); await writeFile(join(dir, "meetings", id, "meeting.json"), JSON.stringify(stored));
     const disabled = await start(); await disabled.service.idle(); expect(transcribeMeeting).not.toHaveBeenCalled(); expect(processTranscript).not.toHaveBeenCalled();
     const second = await start({ resumeMeetingJobs: true }); await second.service.idle();
-    expect((await second.service.get(id)).status).toBe("done"); expect(transcribeMeeting).toHaveBeenCalledTimes(status === "summarizing" ? 0 : 1);
+    expect((await second.service.get(id)).status).toBe(status === "summarizing" ? "done" : "naming"); expect(transcribeMeeting).toHaveBeenCalledTimes(status === "summarizing" ? 0 : 1);
   });
   it("leaves unfinished recordings open on restart", async () => {
     const first = await start(); const id = await first.create(); await first.chunk(id); await first.service.dispose();
@@ -240,9 +245,9 @@ describe("meeting jobs", () => {
 });
 
 describe("audio retention", () => {
-  it("retains audio for 24 hours after done, removes it after expiry and keeps the transcript", async () => {
+  it("retains audio for 24 hours after naming, removes it after expiry and keeps the transcript", async () => {
     const { create, chunk, finish, request, service } = await start(); const id = await create(); await chunk(id); const done = await finish(id);
-    expect(Date.parse(done.audioExpiresAt!) - Date.parse(done.completedAt!)).toBeCloseTo(AUDIO_RETENTION_MS, -2);
+    expect(Date.parse(done.audioExpiresAt!) - Date.parse(done.transcribedAt!)).toBeCloseTo(AUDIO_RETENTION_MS, -2);
     await service.cleanup(Date.parse(done.audioExpiresAt!) - 1); expect((await request(`/meetings/${id}/audio`)).status).toBe(200);
     await service.cleanup(Date.parse(done.audioExpiresAt!)); expect((await request(`/meetings/${id}/audio`)).status).toBe(404);
     expect(await service.get(id)).toMatchObject({ transcript: done.transcript, protocol: done.protocol, audioDeletedAt: expect.any(String) });
@@ -293,10 +298,157 @@ it.each([true, false])("persists safe provider attempts and exposes them through
   const { create, chunk, finish, request } = await start(); const id = await create(); await chunk(id);
   const meeting = await finish(id);
   expect(meeting.providerAttempts).toEqual(attempts);
-  expect(meeting.status).toBe(success ? "done" : "error");
+  expect(meeting.status).toBe(success ? "naming" : "error");
   if (!success) { expect(meeting.error).toContain("Mistral: HTTP 422"); expect(meeting.error).toContain("AssemblyAI: no API key configured"); }
   const stored = await readFile(join(dir, "meetings", id, "meeting.json"), "utf8");
   const response = await (await request(`/meetings/${id}`)).text();
   expect(JSON.parse(stored).providerAttempts).toEqual(attempts);
   expect(response).toContain("providerAttempts"); expect(stored + response).not.toContain(secret);
+});
+
+describe("speaker naming before the protocol", () => {
+  it.each(["recording", "upload"])("persists participants and stops at naming for %s, then generates and regenerates with names", async source => {
+    await saveSettings();
+    const { create, chunk, finish, request, service } = await start();
+    const id = await create(source, { participants: [" Anna ", "BEN", "anna"] }); await chunk(id);
+    const naming = await finish(id);
+    expect(naming).toMatchObject({ participants: ["Anna", "BEN"], status: "naming", progress: 100, protocol: "", job: "protocol" });
+    expect(processTranscript).not.toHaveBeenCalled();
+    expect(transcribeMeeting).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ contextBias: ["Voitex", "Anna", "BEN"], meetingFallback: false }));
+    const response = await request(`/meetings/${id}/protocol`, "POST", { speakerNames: { "1:raw-B": " Anna ", "1:raw-A": "Ben" } });
+    expect(response.status).toBe(202); expect(await response.json()).toEqual({ status: "queued" }); await service.idle();
+    const done = await service.get(id); expect(done.status).toBe("done"); expect(done.speakerNames).toEqual({ "1:raw-B": "Anna", "1:raw-A": "Ben" });
+    const task = source === "recording" ? "protocol" : "summary";
+    expect(processTranscript).toHaveBeenCalledWith(source === "recording" ? "groq" : "mistral", expect.objectContaining({ task, instructions: `Custom ${task}`,
+      transcript: expect.stringContaining("Teilnehmende: Anna, BEN\n\n[00:00:00] Anna: Hello") }));
+    expect((await request(`/meetings/${id}/protocol`, "POST", { speakerNames: { "1:raw-B": "Carla" } })).status).toBe(202); await service.idle();
+    expect(processTranscript.mock.calls.at(-1)![1].transcript).toContain("Carla: Hello");
+    expect((await service.get(id)).audioExpiresAt).toBe(naming.audioExpiresAt);
+    expect(transcribeMeeting).toHaveBeenCalledTimes(1);
+  });
+  it("supports body-less protocol creation without assigning names", async () => {
+    const { create, chunk, finish, request, service } = await start(); const id = await create(); await chunk(id); await finish(id);
+    expect((await request(`/meetings/${id}/protocol`, "POST")).status).toBe(202); await service.idle();
+    expect((await service.get(id)).speakerNames).toEqual({});
+    expect(processTranscript).toHaveBeenCalledWith("mistral", expect.objectContaining({ transcript: expect.stringContaining("Sprecher 1: Hello") }));
+  });
+  it.each([null, "Anna", [""], ["   "], [42], ["x".repeat(61)], Array(21).fill("Anna")])("rejects invalid participants on create and PATCH (%j)", async participants => {
+    const { create, request, service } = await start();
+    expect((await request("/meetings", "POST", { source: "upload", language: "de", participants })).status).toBe(400);
+    const id = await create();
+    expect((await request(`/meetings/${id}`, "PATCH", { participants, title: "Should not persist" })).status).toBe(400);
+    expect((await service.get(id)).title).toBe("Meeting"); expect((await service.get(id)).participants).toBeUndefined();
+  });
+  it("accepts boundary participant sizes, deduplicates and allows clearing via PATCH", async () => {
+    const { create, request, service } = await start(); const id = await create("upload", { participants: [] });
+    const names = [" x".trim().repeat(60), ...Array.from({ length: 19 }, (_, n) => `Name ${n}`)];
+    expect((await request(`/meetings/${id}`, "PATCH", { participants: names })).status).toBe(200);
+    expect((await service.get(id)).participants).toEqual(names);
+    expect((await request(`/meetings/${id}`, "PATCH", { participants: [" Müller ", "MÜLLER", "Ben"] })).status).toBe(200);
+    expect((await service.get(id)).participants).toEqual(["Müller", "Ben"]);
+    expect((await request(`/meetings/${id}`, "PATCH", { participants: [] })).status).toBe(200);
+    expect((await service.get(id)).participants).toEqual([]);
+  });
+  it.each([null, [], { speakerNames: null }, { speakerNames: [] }, { speakerNames: { "1:raw-B": "" } },
+    { speakerNames: { "1:raw-B": "x".repeat(101) } }, { speakerNames: { "unknown": "Anna" } }, { participants: ["Anna"] }
+  ])("validates protocol payload without changing naming state (%j)", async body => {
+    const { create, chunk, finish, request, service } = await start(); const id = await create(); await chunk(id); await finish(id);
+    expect((await request(`/meetings/${id}/protocol`, "POST", body)).status).toBe(400);
+    expect((await service.get(id)).status).toBe("naming"); expect(processTranscript).not.toHaveBeenCalled();
+  });
+  it.each(["queued", "transcribing", "summarizing", "error"])("rejects protocol creation from %s", async status => {
+    const { create, chunk, finish, request, service } = await start(); const id = await create(); await chunk(id);
+    const meeting = await finish(id); meeting.status = status as typeof meeting.status;
+    await writeFile(join(dir, "meetings", id, "meeting.json"), JSON.stringify(meeting));
+    expect((await request(`/meetings/${id}/protocol`, "POST")).status).toBe(409);
+    expect((await service.get(id)).status).toBe(status); expect(processTranscript).not.toHaveBeenCalled();
+  });
+  it.each([undefined, false, true])("passes only the explicit meetingFallback opt-in from persisted settings (%s)", async meetingFallback => {
+    await saveSettings({}, meetingFallback === undefined ? {} : { meetingFallback });
+    const { create, chunk, finish } = await start(); const id = await create(); await chunk(id); await finish(id);
+    expect(transcribeMeeting).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ meetingFallback: meetingFallback === true }));
+  });
+  it("caps combined lexicon and participant terms with case-insensitive deduplication", async () => {
+    await saveSettings({}, { lexicon: [{ spoken: "", correct: "Anna" }, { correct: "ANNA" }, ...Array.from({ length: 98 }, (_, n) => ({ correct: `Term${n}` }))] });
+    const { create, chunk, finish } = await start(); const id = await create("upload", { participants: ["anna", " Ben ", "Carla"] }); await chunk(id); await finish(id);
+    const terms = transcribeMeeting.mock.calls[0][1].contextBias;
+    expect(terms).toHaveLength(100); expect(terms[0]).toBe("Anna"); expect(terms.at(-1)).toBe("Ben"); expect(terms).not.toContain("Carla");
+  });
+  it("retries transcription to naming and retries protocol errors without retranscription even with a provider", async () => {
+    transcribeMeeting.mockRejectedValueOnce(new Error("private-transcription-key"));
+    const { create, chunk, finish, request, service } = await start(); const id = await create(); await chunk(id); await finish(id);
+    expect((await service.get(id)).job).toBe("transcribe");
+    expect((await request(`/meetings/${id}/retry`, "POST", { provider: "assemblyai" })).status).toBe(202); await service.idle();
+    expect((await service.get(id)).status).toBe("naming");
+    expect(transcribeMeeting.mock.calls.at(-1)![1]).toMatchObject({ provider: "assemblyai", meetingFallback: false });
+    processTranscript.mockRejectedValueOnce(new Error("private-protocol-key"));
+    expect((await request(`/meetings/${id}/protocol`, "POST")).status).toBe(202); await service.idle();
+    expect(await service.get(id)).toMatchObject({ status: "error", job: "protocol", error: "Meeting protocol generation failed." });
+    await request(`/meetings/${id}/audio`, "DELETE");
+    expect((await request(`/meetings/${id}/retry`, "POST", { provider: "mistral" })).status).toBe(202); await service.idle();
+    expect((await service.get(id)).status).toBe("done"); expect(transcribeMeeting).toHaveBeenCalledTimes(2);
+  });
+  it.each(["naming", "done", "error"])("leaves persisted %s records untouched on restart, including legacy done records", async status => {
+    const first = await start(); const id = await first.create(); await first.chunk(id); const stored = await first.finish(id);
+    stored.status = status as typeof stored.status;
+    if (status === "done") { delete stored.participants; delete stored.transcribedAt; delete stored.job; stored.protocol = "Old protocol"; }
+    const serialized = JSON.stringify(stored);
+    await first.service.dispose(); await writeFile(join(dir, "meetings", id, "meeting.json"), serialized);
+    transcribeMeeting.mockClear(); processTranscript.mockClear();
+    const second = await start({ resumeMeetingJobs: true }); await second.service.idle();
+    expect(transcribeMeeting).not.toHaveBeenCalled(); expect(processTranscript).not.toHaveBeenCalled();
+    expect(await readFile(join(dir, "meetings", id, "meeting.json"), "utf8")).toBe(serialized);
+    if (status === "done") {
+      expect((await second.request(`/meetings/${id}/protocol`, "POST")).status).toBe(202); await second.service.idle();
+      expect((await second.service.get(id)).status).toBe("done");
+    }
+  });
+});
+
+it("applies lexicon rules and trims raw segments, merges only consecutive same-speaker paragraphs within a part, and uses Berlin summer time", async () => {
+  await saveSettings();
+  transcribeMeeting.mockResolvedValue({ provider: "mistral", model: "test", segments: [
+    { speaker: "A", start: 0, end: 1, text: " Voi Tex " }, { speaker: "A", start: 1, end: 2, text: " again " },
+    { speaker: "B", start: 2, end: 3, text: " Hi " }, { speaker: "A", start: 3, end: 4, text: " Bye " }
+  ] });
+  const { create, chunk, finish, request, service } = await start(); const id = await create(); await chunk(id, 1); await chunk(id, 2);
+  const meeting = await finish(id, { parts: [
+    { part: 1, startedAt: "2026-06-27T10:00:00Z", endedAt: "2026-06-27T10:00:04Z" },
+    { part: 2, startedAt: "2026-06-27T10:02:00Z", endedAt: "2026-06-27T10:02:04Z" }
+  ] });
+  expect(meeting.segments).toHaveLength(8); expect(meeting.segments.map(segment => segment.text)).toEqual(["Voitex", "again", "Hi", "Bye", "Voitex", "again", "Hi", "Bye"]);
+  expect(meeting.transcript.split("\n")).toEqual([
+    "[00:00:00] Sprecher 1: Voitex again", "[00:00:02] Sprecher 2: Hi", "[00:00:03] Sprecher 1: Bye",
+    "[Unterbrechung 12:00–12:02]", "[00:00:00] Teil 2 · Sprecher 1: Voitex again", "[00:00:02] Teil 2 · Sprecher 2: Hi", "[00:00:03] Teil 2 · Sprecher 1: Bye"
+  ]);
+  await request(`/meetings/${id}/protocol`, "POST"); await service.idle();
+  expect(processTranscript.mock.calls[0][1].transcript).toBe(meeting.transcript);
+});
+
+it("serves HTTP byte ranges with the correct audio content type for seeking during naming", async () => {
+  const { create, chunk, finish, request } = await start(); const id = await create(); await chunk(id, 1, 0, "0123456789"); await finish(id);
+  const response = await request(`/meetings/${id}/audio?part=1`, "GET", undefined, { Range: "bytes=3-6" });
+  expect(response.status).toBe(206); expect(response.headers.get("accept-ranges")).toBe("bytes");
+  expect(response.headers.get("content-range")).toBe("bytes 3-6/10"); expect(response.headers.get("content-length")).toBe("4");
+  expect(response.headers.get("content-type")).toBe("audio/webm"); expect(await response.text()).toBe("3456");
+  expect((await request(`/meetings/${id}/audio`, "GET", undefined, { Range: "bytes=20-" })).status).toBe(416);
+});
+
+it("expires audio after naming even while protocol generation is running", async () => {
+  const { create, chunk, finish, request, service } = await start(); const id = await create(); await chunk(id); const meeting = await finish(id);
+  let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; }); releases.push(release);
+  processTranscript.mockImplementationOnce(async () => { await gate; return { text: "Protocol", provider: "Mistral", model: "test" }; });
+  await request(`/meetings/${id}/protocol`, "POST"); await vi.waitFor(() => expect(processTranscript).toHaveBeenCalledTimes(1));
+  await service.cleanup(Date.parse(meeting.audioExpiresAt!));
+  expect((await request(`/meetings/${id}/audio`)).status).toBe(404);
+  release(); await service.idle(); expect((await service.get(id)).status).toBe("done");
+  expect((await service.get(id)).audioExpiresAt).toBe(meeting.audioExpiresAt);
+});
+
+it.each([undefined, false, true, null, "false", 1])("validates additive meetingFallback settings (%j)", async meetingFallback => {
+  await saveSettings(); const { request } = await start(); const settings = JSON.parse(await readFile(join(dir, "settings.json"), "utf8"));
+  if (meetingFallback !== undefined) settings.meetingFallback = meetingFallback;
+  const response = await request("/settings", "PUT", settings);
+  expect(response.status).toBe(meetingFallback === undefined || typeof meetingFallback === "boolean" ? 200 : 400);
+  if (response.ok) { expect(await (await request("/settings")).json()).toEqual(settings); expect(settings.version).toBe(1); }
 });

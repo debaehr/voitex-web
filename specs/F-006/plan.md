@@ -44,3 +44,15 @@ Befunde für Lauf 3:
 | 3 | wie oben, zusätzlich: Teilnehmende-Feld (Aufnahme + Upload), Ansicht „Sprecher zuordnen“ (Zitate, ▶ ab Zeitmarke, Namensfelder mit Vorschlägen), Einstellung Ausweiche, neue Modi mit `mistral`. | medium |
 
 Erledigt durch Lead (27.10.): `settings.json` auf `mistral` umgestellt (Sicherung `~/backup/voitex-web-data-*`).
+
+## Ergebnis Lauf 2b + Live-Probe (Lead, 27.10.2026)
+
+- Defaults alle `mistral`, `meetingFallback` Standard `false` (live über `/api/settings/defaults`).
+- `context_bias` bei `voxtral-mini-latest` (Diktat) akzeptiert und wirksam („Carbonbewährung“ → „Carbonbewehrung“).
+  100 Begriffe akzeptiert (150 ebenfalls, Grenze 100 bleibt).
+- Ablauf über Backend: `participants` gespeichert → `naming` → `POST /protocol` mit `speakerNames` →
+  `done`; Protokoll (Mistral `mistral-large-latest`) mit „Torsten“/„Anna Berger“. Transkript als Absätze je
+  Sprecher, ohne führende Leerzeichen. Audio-Range: 206 mit `Content-Range`, `audio/wav`.
+- Befund: AssemblyAI `universal-2` lehnt `keyterms_prompt` für Deutsch ab (HTTP 400, nur en*). Behoben:
+  Standardmodell `universal-3-5-pro` (Deutsch + Schlüsselwörter live ok, bessere Fachbegriffe);
+  `universal-2` sendet Schlüsselwörter nur bei Englisch.

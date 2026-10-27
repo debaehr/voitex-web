@@ -7,6 +7,7 @@ export type TranscribeInput = {
   mimetype: string;
   language?: string;
   prompt?: string;
+  contextBias?: string[];
   mode?: WorkMode;
 };
 

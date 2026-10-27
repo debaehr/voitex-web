@@ -60,7 +60,7 @@ it.each(["de", "en", "hr", "source", undefined])("passes process target %s to th
 });
 it("forwards the English alias", async () => {
   expect((await post("/api/process", { ...input, translateToEnglish: true })).status).toBe(200);
-  expect(processTranscript).toHaveBeenCalledWith("openai", expect.objectContaining({ translateToEnglish: true }));
+  expect(processTranscript).toHaveBeenCalledWith("mistral", expect.objectContaining({ translateToEnglish: true }));
 });
 it.each(["fr", "", null, 1, {}, "toString"])("rejects unknown process target %j", async targetLanguage => {
   const response = await post("/api/process", { ...input, targetLanguage });
@@ -88,8 +88,10 @@ it.each([
   expect(response.status).toBe(400);
   expect(await response.json()).toHaveProperty("error"); expect(processTranscript).not.toHaveBeenCalled();
 });
-it("requires translation provider and target, and returns sanitized provider errors", async () => {
-  for (const body of [{ text: "Text", targetLanguage: "en" }, { text: "Text", provider: "groq" }]) {
+it("defaults translation to Mistral, requires a target, and returns sanitized provider errors", async () => {
+  expect((await post("/api/translate", { text: "Text", targetLanguage: "en" })).status).toBe(200);
+  expect(processTranscript).toHaveBeenCalledWith("mistral", expect.any(Object));
+  for (const body of [{ text: "Text", provider: "groq" }]) {
     expect((await post("/api/translate", body)).status).toBe(400);
   }
   vi.spyOn(console, "error").mockImplementation(() => {});

@@ -3,6 +3,7 @@ import { meetingRequest } from "./meeting-http.js";
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { transcribeMeeting as transcribeAssemblyAI } from "./assemblyai.js";
+import { contextBiasTerms } from "../context-bias.js";
 
 export type MeetingProvider = "mistral" | "assemblyai";
 export type MeetingSegment = { speaker: string; start: number; end: number; text: string };
@@ -21,6 +22,7 @@ export type MeetingTranscriptionOptions = {
   contextBias?: string[];
   durationSeconds?: number;
   provider?: MeetingProvider;
+  meetingFallback?: boolean;
   contentType?: string;
 };
 export function isMeetingProvider(value: unknown): value is MeetingProvider {
@@ -32,12 +34,14 @@ export function availableMeetingProviders(): MeetingProvider[] {
 
 export async function transcribeMeeting(filePath: string, options: MeetingTranscriptionOptions = {}): Promise<MeetingTranscription> {
   const preferred = options.provider ?? "mistral";
-  const order: MeetingProvider[] = preferred === "assemblyai" ? ["assemblyai", "mistral"] : ["mistral", "assemblyai"];
+  const order: MeetingProvider[] = [preferred];
+  if (options.meetingFallback === true) order.push(preferred === "mistral" ? "assemblyai" : "mistral");
   const attempts: ProviderAttempt[] = [];
   for (const provider of order) {
     // Voxtral accepts at most three hours per request, including as a fallback.
     if (provider === "mistral" && (options.durationSeconds ?? 0) > 3 * 60 * 60) {
-      attempts.push({ provider, ok: false, reason: "Mistral: duration exceeds 3 hours" }); continue;
+      attempts.push({ provider, ok: false, reason: "Mistral: duration exceeds 3 hours" +
+        (options.meetingFallback === true ? "" : "; enable AssemblyAI fallback or retry with AssemblyAI") }); continue;
     }
     if (!availableMeetingProviders().includes(provider)) {
       attempts.push({ provider, ok: false, reason: `${provider === "mistral" ? "Mistral" : "AssemblyAI"}: no API key configured` }); continue;
@@ -69,7 +73,7 @@ async function transcribeMistral(filePath: string, options: MeetingTranscription
   form.append("diarize", "true");
   form.append("timestamp_granularities", "segment");
   if (options.language && options.language !== "auto") form.append("language", options.language);
-  for (const term of [...new Set((options.contextBias ?? []).map(term => term.trim()).filter(Boolean))].slice(0, 100)) {
+  for (const term of contextBiasTerms(options.contextBias ?? [])) {
     form.append("context_bias", term);
   }
   const response = await meetingRequest("https://api.mistral.ai/v1/audio/transcriptions", {

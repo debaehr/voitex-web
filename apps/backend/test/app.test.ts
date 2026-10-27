@@ -95,7 +95,7 @@ describe("API and frontend", () => {
 
 describe("settings", () => {
   it("returns the complete default shape and persists atomically with backup", async () => {
-    const request = await start(); expect(await (await request("/api/settings/defaults")).json()).toEqual({ ...settings(), providers: { ...settings().providers, meetings: "mistral" }, customModes: [], hiddenModes: [] });
+    const request = await start(); expect(await (await request("/api/settings/defaults")).json()).toEqual({ ...settings(), providers: Object.fromEntries([...modes, "meetings"].map(mode => [mode, "mistral"])), meetingFallback: false, customModes: [], hiddenModes: [] });
     expect(Object.keys(defaultPrompts)).toEqual(modes);
     expect(Object.values(defaultPrompts).every(value => typeof value === "string" && value.length > 0)).toBe(true);
     expect((await request("/api/settings", "PUT", settings())).status).toBe(200);

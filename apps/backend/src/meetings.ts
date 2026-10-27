@@ -5,10 +5,12 @@ import { readJsonFile, withFileLock, writeJsonFile } from "./persistence.js";
 import { isProvider, processTranscript } from "./providers/index.js";
 import { transcribeMeeting, MeetingTranscriptionError, type ProviderAttempt, type MeetingProvider, type MeetingSegment } from "./providers/meetings.js";
 import { defaultPrompts } from "./prompts.js";
+import { contextBiasTerms } from "./context-bias.js";
+import { applyLexicon, lexiconEntries } from "./lexicon.js";
 
 export const CHUNK_LIMIT_BYTES = 10 * 1024 * 1024;
 export const AUDIO_RETENTION_MS = 24 * 60 * 60 * 1000;
-export type MeetingStatus = "queued" | "transcribing" | "summarizing" | "done" | "error";
+export type MeetingStatus = "queued" | "transcribing" | "naming" | "summarizing" | "done" | "error";
 export type MeetingPart = {
   part: number;
   chunks: Record<string, number>;
@@ -25,7 +27,8 @@ export type MeetingPart = {
 export type DisplaySegment = MeetingSegment & { part: number; speakerId: string; speakerLabel: string };
 export type Meeting = {
   id: string; title: string; source: "recording" | "upload"; language: string;
-  createdAt: string; updatedAt: string; finishedAt?: string; completedAt?: string;
+  participants?: string[];
+  createdAt: string; updatedAt: string; finishedAt?: string; transcribedAt?: string; completedAt?: string;
   status: MeetingStatus; progress: number; error?: string;
   providerAttempts?: ProviderAttempt[];
   parts: MeetingPart[]; durationSeconds?: number;
@@ -73,9 +76,12 @@ export function renderTranscript(meeting: Meeting) {
   for (const part of meeting.parts) {
     const gap = meeting.interruptions.find(item => item.afterPart === part.part - 1);
     if (gap) lines.push(gap.text);
+    let previousSpeaker: string | undefined;
     for (const segment of meeting.segments.filter(item => item.part === part.part)) {
       const name = Object.hasOwn(meeting.speakerNames, segment.speakerId) ? meeting.speakerNames[segment.speakerId] : segment.speakerLabel;
-      lines.push(`[${formatTime(segment.start)}] ${name}: ${segment.text}`);
+      if (previousSpeaker === segment.speakerId) lines[lines.length - 1] += ` ${segment.text.trim()}`;
+      else lines.push(`[${formatTime(segment.start)}] ${name}: ${segment.text.trim()}`);
+      previousSpeaker = segment.speakerId;
     }
   }
   return lines.join("\n");
@@ -83,6 +89,15 @@ export function renderTranscript(meeting: Meeting) {
 function formatTime(seconds: number) {
   return [Math.floor(seconds / 3600), Math.floor(seconds % 3600 / 60), Math.floor(seconds % 60)]
     .map(value => String(value).padStart(2, "0")).join(":");
+}
+const berlinTime = new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+
+function saveSpeakerNames(meeting: Meeting, names: Record<string, string>) {
+  const known = new Set(meeting.segments.map(segment => segment.speakerId));
+  for (const key of Object.keys(names)) if (!known.has(key)) throw new MeetingError(400, "Unknown speaker id.");
+  // Equal display names merge speakers without destroying the per-part raw ids.
+  meeting.speakerNames = { ...meeting.speakerNames, ...names };
+  meeting.transcript = renderTranscript(meeting);
 }
 
 export class MeetingService {
@@ -117,7 +132,7 @@ export class MeetingService {
     }
     return meetings.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
-  async create(input: Pick<Meeting, "title" | "source" | "language">) {
+  async create(input: Pick<Meeting, "title" | "source" | "language" | "participants">) {
     const id = randomUUID();
     const now = new Date().toISOString();
     const meeting: Meeting = { ...input, id, createdAt: now, updatedAt: now, status: "queued", progress: 0,
@@ -180,29 +195,30 @@ export class MeetingService {
   async retry(id: string, provider?: MeetingProvider) {
     await this.change(id, meeting => {
       if (this.scheduled.has(id) || meeting.status !== "error" || !meeting.finishedAt) throw new MeetingError(409, "Meeting is not retryable.");
-      if (meeting.audioDeletedAt && (provider || meeting.job !== "protocol")) throw new MeetingError(409, "Meeting audio was deleted.");
-      if (provider) { meeting.requestedProvider = provider; meeting.job = "transcribe"; }
+      if (meeting.audioDeletedAt && meeting.job !== "protocol") throw new MeetingError(409, "Meeting audio was deleted.");
+      if (provider && meeting.job !== "protocol") meeting.requestedProvider = provider;
       meeting.status = "queued"; meeting.progress = 0; delete meeting.error;
     });
     this.enqueue(id);
   }
-  async protocol(id: string) {
+  async protocol(id: string, speakerNames?: Record<string, string>) {
     await this.change(id, meeting => {
-      if (this.scheduled.has(id) || !["done", "error"].includes(meeting.status) || meeting.job !== "protocol" || !meeting.segments.length) throw new MeetingError(409, "Meeting transcript is not ready.");
+      if (this.scheduled.has(id) || !["naming", "done"].includes(meeting.status) || !meeting.segments.length) throw new MeetingError(409, "Meeting transcript is not ready.");
+      if (speakerNames) saveSpeakerNames(meeting, speakerNames);
       meeting.job = "protocol"; meeting.status = "queued"; meeting.progress = 0; delete meeting.error;
     });
     this.enqueue(id);
   }
-  async patch(id: string, input: { title?: string; speakerNames?: Record<string, string> }) {
+  async patch(id: string, input: { title?: string; speakerNames?: Record<string, string>; participants?: string[] }) {
     return this.change(id, meeting => {
       if (input.title !== undefined) meeting.title = input.title;
+      if (input.participants !== undefined) {
+        if (this.scheduled.has(id)) throw new MeetingError(409, "Meeting is still processing.");
+        meeting.participants = input.participants;
+      }
       if (input.speakerNames) {
         if (this.scheduled.has(id)) throw new MeetingError(409, "Meeting is still processing.");
-        const known = new Set(meeting.segments.map(segment => segment.speakerId));
-        for (const key of Object.keys(input.speakerNames)) if (!known.has(key)) throw new MeetingError(400, "Unknown speaker id.");
-        // Equal display names merge speakers without destroying the per-part raw ids.
-        meeting.speakerNames = { ...meeting.speakerNames, ...input.speakerNames };
-        meeting.transcript = renderTranscript(meeting);
+        saveSpeakerNames(meeting, input.speakerNames);
       }
       return meeting;
     });
@@ -215,7 +231,7 @@ export class MeetingService {
   }
   async deleteAudio(id: string) {
     await this.change(id, async meeting => {
-      if (this.scheduled.has(id) || !["done", "error"].includes(meeting.status)) throw new MeetingError(409, "Meeting is still processing.");
+      if (this.scheduled.has(id) || !["naming", "done", "error"].includes(meeting.status)) throw new MeetingError(409, "Meeting is still processing.");
       await this.removeAudio(meeting);
     });
   }
@@ -238,9 +254,9 @@ export class MeetingService {
   }
   async cleanup(now = Date.now()) {
     for (const meeting of await this.list()) {
-      if (!meeting.audioDeletedAt && meeting.audioExpiresAt && Date.parse(meeting.audioExpiresAt) <= now && !this.scheduled.has(meeting.id)) {
+      if (!meeting.audioDeletedAt && meeting.audioExpiresAt && Date.parse(meeting.audioExpiresAt) <= now && (!this.scheduled.has(meeting.id) || meeting.job === "protocol")) {
         await this.change(meeting.id, async current => {
-          if (!this.scheduled.has(current.id) && !current.audioDeletedAt && current.audioExpiresAt && Date.parse(current.audioExpiresAt) <= now) await this.removeAudio(current);
+          if ((!this.scheduled.has(current.id) || current.job === "protocol") && !current.audioDeletedAt && current.audioExpiresAt && Date.parse(current.audioExpiresAt) <= now) await this.removeAudio(current);
         });
       }
     }
@@ -250,7 +266,10 @@ export class MeetingService {
     if (options.resume) {
       for (const meeting of await this.list()) {
         if (meeting.finishedAt && ["queued", "transcribing", "summarizing"].includes(meeting.status)) {
-          await this.change(meeting.id, current => { current.status = "queued"; delete current.error; });
+          await this.change(meeting.id, current => {
+            current.job ??= current.status === "summarizing" ? "protocol" : "transcribe";
+            current.status = "queued"; delete current.error;
+          });
           this.enqueue(meeting.id);
         }
       }
@@ -317,20 +336,21 @@ export class MeetingService {
         await this.change(id, current => { current.status = "transcribing"; current.progress = 0; current.segments = []; current.interruptions = []; current.providerAttempts = []; });
         meeting = await this.get(id);
         const settings = await this.settings();
-        const contextBias = Array.isArray(settings.lexicon) ? settings.lexicon.flatMap((entry: unknown) =>
-          isRecord(entry) && typeof entry.correct === "string" ? [entry.correct] : []) : [];
+        const lexicon = lexiconEntries(settings.lexicon);
+        const contextBias = contextBiasTerms([...lexicon.map(entry => entry.correct), ...(meeting.participants ?? [])]);
         for (let i = 0; i < meeting.parts.length; i++) {
           const part = meeting.parts[i];
           const result = await transcribeMeeting(join(this.partDirectory(id, part.part), audioName(part)), {
             language: meeting.language, contextBias, durationSeconds: partDuration(part) || (meeting.parts.length === 1 ? meeting.durationSeconds : undefined),
             contentType: part.contentType,
+            meetingFallback: settings.meetingFallback === true,
             provider: meeting.requestedProvider ?? (settings.providers?.meetings === "assemblyai" ? "assemblyai" : "mistral")
           });
           const labels = new Map<string, string>();
           const segments: DisplaySegment[] = result.segments.map(segment => {
             if (!labels.has(segment.speaker)) labels.set(segment.speaker, `Sprecher ${labels.size + 1}`);
             const label = labels.get(segment.speaker)!;
-            return { ...segment, part: part.part, speakerId: `${part.part}:${segment.speaker}`,
+            return { ...segment, text: applyLexicon(segment.text, lexicon).trim(), part: part.part, speakerId: `${part.part}:${segment.speaker}`,
               speakerLabel: part.part > 1 ? `Teil ${part.part} · ${label}` : label };
           });
           await this.change(id, current => {
@@ -340,7 +360,7 @@ export class MeetingService {
             const storedPart = current.parts.find(item => item.part === part.part)!;
             storedPart.provider = result.provider; storedPart.model = result.model;
             storedPart.durationSeconds = partDuration(part) || Math.max(...result.segments.map(segment => segment.end));
-            current.progress = Math.round((i + 1) / meeting.parts.length * 80);
+            current.progress = Math.round((i + 1) / meeting.parts.length * 100);
           });
         }
         await this.change(id, current => {
@@ -348,20 +368,26 @@ export class MeetingService {
             const before = current.parts[i];
             if (!before.endedAt || !part.startedAt || Date.parse(part.startedAt) <= Date.parse(before.endedAt)) return [];
             return [{ afterPart: before.part, start: before.endedAt, end: part.startedAt,
-              text: `[Unterbrechung ${before.endedAt.slice(11, 16)}–${part.startedAt.slice(11, 16)}]` }];
+              text: `[Unterbrechung ${berlinTime.format(new Date(before.endedAt))}–${berlinTime.format(new Date(part.startedAt))}]` }];
           });
           current.durationSeconds = current.parts.reduce((sum, part) => sum + partDuration(part), 0);
           current.transcript = renderTranscript(current); current.job = "protocol";
+          current.status = "naming"; current.progress = 100;
+          current.transcribedAt = new Date().toISOString();
+          current.audioExpiresAt = new Date(Date.parse(current.transcribedAt) + AUDIO_RETENTION_MS).toISOString();
+          delete current.error;
         });
+        return;
       }
       phase = "protocol";
       await this.change(id, current => { current.status = "summarizing"; current.progress = 85; });
       meeting = await this.get(id);
       const settings = await this.settings();
       const task = meeting.source === "recording" ? "protocol" : "summary";
-      const provider = settings.providers?.[task] ?? "openai";
+      const provider = settings.providers?.[task] ?? "mistral";
       if (!isProvider(provider)) throw new Error("Invalid protocol provider.");
-      const result = await processTranscript(provider, { transcript: renderTranscript(meeting), mode: "formal", task,
+      const transcript = [meeting.participants?.length ? `Teilnehmende: ${meeting.participants.join(", ")}` : "", renderTranscript(meeting)].filter(Boolean).join("\n\n");
+      const result = await processTranscript(provider, { transcript, mode: "formal", task,
         instructions: typeof settings.prompts?.[task] === "string" ? settings.prompts[task] : defaultPrompts[task] });
       await this.change(id, current => {
         current.protocol = result.text; current.protocolProvider = result.provider; current.protocolModel = result.model;
@@ -383,12 +409,12 @@ export class MeetingService {
       } catch (failure) { if (!(failure instanceof MeetingError && failure.status === 404)) throw failure; }
     }
   }
-  private async settings(): Promise<{ providers?: Record<string, unknown>; prompts?: Record<string, unknown>; lexicon?: unknown[] }> {
+  private async settings(): Promise<{ providers?: Record<string, unknown>; prompts?: Record<string, unknown>; lexicon?: unknown[]; meetingFallback?: boolean }> {
     const settings = await readJsonFile(join(this.dataDir, "settings.json"));
     if (settings !== null && !isRecord(settings)) throw new Error("Invalid settings file.");
     if (!settings) return {};
     if (settings.providers !== undefined && !isRecord(settings.providers) || settings.prompts !== undefined && !isRecord(settings.prompts)) throw new Error("Invalid settings file.");
-    return { providers: settings.providers, prompts: settings.prompts, lexicon: Array.isArray(settings.lexicon) ? settings.lexicon : [] };
+    return { providers: settings.providers, prompts: settings.prompts, lexicon: Array.isArray(settings.lexicon) ? settings.lexicon : [], meetingFallback: settings.meetingFallback === true };
   }
 }
 function partDuration(part: MeetingPart): number {

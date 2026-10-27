@@ -14,6 +14,21 @@ function route(ready: Promise<void>, handler: Handler) {
 function invalid(message = "Invalid body."): never { throw new MeetingError(400, message); }
 function validTitle(value: unknown): value is string { return typeof value === "string" && value.length <= 200; }
 function validDuration(value: unknown): value is number { return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 10 * 60 * 60; }
+function participants(value: unknown): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length > 20 || value.some(name => typeof name !== "string" || !name.trim() || name.trim().length > 60)) invalid("Invalid participants.");
+  const seen = new Set<string>();
+  return value.map(name => (name as string).trim()).filter(name => {
+    const key = name.toLocaleLowerCase("de-DE");
+    if (seen.has(key)) return false;
+    seen.add(key); return true;
+  });
+}
+function speakerNames(value: unknown): Record<string, string> | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value) || Object.values(value).some(name => typeof name !== "string" || !name.trim() || name.length > 100)) invalid("Invalid speaker names.");
+  return Object.fromEntries(Object.entries(value).map(([id, name]) => [id, (name as string).trim()]));
+}
 function validDate(value: unknown): value is string {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value));
 }
@@ -58,7 +73,9 @@ export function createMeetingRouter(service: MeetingService, ready: Promise<void
     if (!isRecord(input) || (input.source !== "recording" && input.source !== "upload") ||
         typeof input.language !== "string" || !/^(auto|[a-z]{2,3}(?:-[A-Za-z]{2})?)$/.test(input.language) ||
         input.title !== undefined && !validTitle(input.title)) invalid();
-    const id = await service.create({ title: input.title ?? "", source: input.source, language: input.language });
+    const names = participants(input.participants);
+    const id = await service.create({ title: input.title ?? "", source: input.source, language: input.language,
+      ...(names !== undefined ? { participants: names } : {}) });
     res.status(201).json({ id });
   }));
   router.get("/meetings", route(ready, async (_req, res) => {
@@ -86,14 +103,20 @@ export function createMeetingRouter(service: MeetingService, ready: Promise<void
     res.status(202).json({ status: "queued" });
   }));
   router.post("/meetings/:id/protocol", route(ready, async (req, res) => {
-    await service.protocol(req.params.id as string); res.status(202).json({ status: "queued" });
+    const input = req.body === undefined ? {} : req.body;
+    if (!isRecord(input) || Object.keys(input).some(key => key !== "speakerNames")) invalid();
+    await service.protocol(req.params.id as string, speakerNames(input.speakerNames));
+    res.status(202).json({ status: "queued" });
   }));
   router.patch("/meetings/:id", route(ready, async (req, res) => {
     const input = req.body;
-    if (!isRecord(input) || !Object.keys(input).length || Object.keys(input).some(key => !["title", "speakerNames"].includes(key)) ||
+    if (!isRecord(input) || !Object.keys(input).length || Object.keys(input).some(key => !["title", "speakerNames", "participants"].includes(key)) ||
         input.title !== undefined && !validTitle(input.title)) invalid();
-    if (input.speakerNames !== undefined && (!isRecord(input.speakerNames) || Object.values(input.speakerNames).some(name => typeof name !== "string" || !name.trim() || name.length > 100))) invalid("Invalid speaker names.");
-    res.json(await service.patch(req.params.id as string, input));
+    res.json(await service.patch(req.params.id as string, {
+      ...(input.title !== undefined ? { title: input.title } : {}),
+      ...(input.participants !== undefined ? { participants: participants(input.participants) } : {}),
+      ...(input.speakerNames !== undefined ? { speakerNames: speakerNames(input.speakerNames) } : {})
+    }));
   }));
   router.delete("/meetings/:id", route(ready, async (req, res) => {
     await service.delete(req.params.id as string); res.json({ ok: true });
@@ -108,7 +131,7 @@ export function createMeetingRouter(service: MeetingService, ready: Promise<void
     res.setHeader("Content-Type", audio.contentType);
     res.setHeader("Content-Disposition", `attachment; filename="part-${part}.${audio.path.split(".").pop()}"`);
     res.setHeader("Cache-Control", "no-store");
-    await new Promise<void>((resolve, reject) => res.sendFile(audio.path, error => {
+    await new Promise<void>((resolve, reject) => res.sendFile(audio.path, { acceptRanges: true }, error => {
       if (error && (error as NodeJS.ErrnoException).code === "ENOENT") reject(new MeetingError(404, "Meeting audio not found."));
       else if (error) reject(error); else resolve();
     }));

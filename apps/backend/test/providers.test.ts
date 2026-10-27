@@ -30,6 +30,17 @@ it("passes prompt to the OpenAI SDK transcription request", async () => {
   expect(create).toHaveBeenCalledWith(expect.objectContaining({ prompt: "Voitex" }));
 });
 
+it.each([{ contextBias: [] }, { contextBias: [" Voitex ", "voitex", "", "Anna", ...Array.from({ length: 110 }, (_, n) => `Term${n}`)] }])("sends repeated bounded context_bias fields for Mistral dictation", async ({ contextBias }) => {
+  vi.stubEnv("MISTRAL_API_KEY", "test-key");
+  const request = vi.fn(async () => new Response(JSON.stringify({ text: "transcript" })));
+  vi.stubGlobal("fetch", request);
+  await mistral.transcribeAudio({ buffer: Buffer.from("audio"), filename: "test.webm", mimetype: "audio/webm", contextBias });
+  const form = (request.mock.calls[0] as unknown as [string, { body: FormData }])[1].body;
+  expect(form.get("model")).toBe("voxtral-mini-latest");
+  expect(form.getAll("context_bias")).toHaveLength(contextBias.length ? 100 : 0);
+  if (contextBias.length) expect(form.getAll("context_bias").slice(0, 2)).toEqual(["Voitex", "Anna"]);
+});
+
 for (const [name, provider] of Object.entries({ openai, mistral, groq })) {
   it.each(["de", "en", "hr", "source", undefined] as const)(`${name} uses shared processing instructions for %s`, async targetLanguage => {
     vi.stubEnv(`${name.toUpperCase()}_API_KEY`, "test-key");

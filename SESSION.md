@@ -1,6 +1,6 @@
 # SESSION STATE — voitex-web
 
-> **Letztes Update:** 271026_0935 · **von:** Claude Opus 5.5
+> **Letztes Update:** 271026_1010 · **von:** Claude Opus 5.5
 > **Branch:** main · **Node:** tool-01
 
 <!--
@@ -21,8 +21,8 @@
 
 Etappe 3: F-006 Meetings-Aufnahme, F-007 Transkript-Upload. Plan `specs/F-006/plan.md`.
 Dazu F-014 Mistral als Standard (Datenschutz) und F-006 v3 (Sprecher zuordnen vor dem
-Protokoll), beide freigegeben 27.10. Lauf 1, 1b und 2 (Frontend Aufnahme, live) fertig; nächster Schritt
-Lauf 2b (Backend F-014 + v3, Codex xhigh), dann Lauf 3.
+Protokoll), beide freigegeben 27.10. Lauf 1, 1b, 2 (Frontend Aufnahme) und 2b (Backend F-014 + v3) fertig und live;
+nächster Schritt Lauf 3 (Frontend Ergebnis, Sprecher zuordnen, Upload, Einstellungen).
 
 ---
 
@@ -71,7 +71,8 @@ Lauf 2b (Backend F-014 + v3, Codex xhigh), dann Lauf 3.
   „Probe 1b Mistral“ liegt in `data/meetings/`.
 - [x] Lauf 2 Frontend Aufnahme (27.10.): `lib/meeting-*.ts`, `useMeetingRecorder.ts`, `views/ProtocolView.tsx`; 133 Frontend-Tests.
   Ergebnisansicht nach `done` ist nur Klartext (`components/MeetingRecordingResult.tsx`) → Lauf 3.
-- [ ] Lauf 2b Backend F-014/v3, 3 Ergebnis + Upload, 4 Abnahme.
+- [x] Lauf 2b Backend F-014/v3 + AssemblyAI-Fix (27.10.), Probe in `specs/F-006/plan.md`.
+- [ ] Lauf 3 Ergebnis + Sprecher zuordnen + Upload + Einstellungen, Lauf 4 Abnahme.
 - [x] `settings.json` auf Mistral umgestellt (Lead, 27.10.; Sicherung `~/backup/voitex-web-data-*`).
   Achtung: Ein offener Browser-Tab mit altem Stand kann beim Speichern zurückschreiben.
 - [ ] Weitere Wünsche (27.10.):

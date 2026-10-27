@@ -5,6 +5,8 @@ import { isProvider, processTranscript, transcribeAudio, WorkMode } from "../pro
 import { defaultPrompts } from "../prompts.js";
 import { readJsonFile, writeJsonFile, withFileLock } from "../persistence.js";
 import { isMeetingProvider, availableMeetingProviders } from "../providers/meetings.js";
+import { contextBiasTerms } from "../context-bias.js";
+import { lexiconEntries } from "../lexicon.js";
 
 import { buildTranslationInstructions, isTargetLanguage, isTranslationLanguage } from "../providers/shared.js";
 
@@ -38,7 +40,8 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
   apiRouter.get("/settings/defaults", (_req, res) => {
     res.json({
       version: 1,
-      providers: { ...Object.fromEntries(Object.keys(defaultPrompts).map(mode => [mode, "openai"])), meetings: "mistral" },
+      providers: { ...Object.fromEntries(Object.keys(defaultPrompts).map(mode => [mode, "mistral"])), meetings: "mistral" },
+      meetingFallback: false,
       prompts: defaultPrompts,
       lexicon: [],
       snippets: [],
@@ -96,7 +99,7 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
       return;
     }
 
-    const provider = req.body?.provider || "openai";
+    const provider = req.body?.provider || "mistral";
     if (!isProvider(provider)) {
       sendError(res, 400, "Invalid provider.");
       return;
@@ -115,12 +118,15 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
     }
 
     try {
+      const settings = provider === "mistral" ? await readJsonFile(settingsPath) : null;
+      const contextBias = contextBiasTerms(lexiconEntries(isRecord(settings) ? settings.lexicon : undefined).map(entry => entry.correct));
       const result = await transcribeAudio(provider, {
         buffer: req.file.buffer,
         filename: req.file.originalname || "recording.webm",
         mimetype: req.file.mimetype || "audio/webm",
         language: req.body?.language,
         ...(provider === "openai" && prompt ? { prompt } : {}),
+        ...(contextBias.length ? { contextBias } : {}),
         mode
       });
 
@@ -132,7 +138,7 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
   }
 
   async function handleTranslate(req: Request, res: Response) {
-    const { text, targetLanguage, provider } = req.body ?? {};
+    const { text, targetLanguage, provider = "mistral" } = req.body ?? {};
     if (typeof text !== "string" || !text.trim()) {
       sendError(res, 400, "Missing text.");
       return;
@@ -172,7 +178,7 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
       return;
     }
 
-    const provider = req.body?.provider || "openai";
+    const provider = req.body?.provider || "mistral";
     if (!isProvider(provider)) {
       sendError(res, 400, "Invalid provider.");
       return;
@@ -315,6 +321,7 @@ function isValidSettings(value: unknown): boolean {
   if (!isRecord(value) || typeof value.version !== "number" || !Number.isFinite(value.version)) return false;
   const { providers, prompts } = value;
   if (!isRecord(providers) || !isRecord(prompts)) return false;
+  if (value.meetingFallback !== undefined && typeof value.meetingFallback !== "boolean") return false;
   const modes = Object.keys(defaultPrompts);
   return modes.every(mode => isProvider(providers[mode])) &&
     Object.entries(providers).every(([key, provider]) => key === "meetings" ? isMeetingProvider(provider) : isProvider(provider)) &&

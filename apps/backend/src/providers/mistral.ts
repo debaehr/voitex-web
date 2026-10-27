@@ -1,5 +1,6 @@
 import { outputTokenLimit } from "./shared.js";
 import { modeInstructions } from "../prompts.js";
+import { contextBiasTerms } from "../context-bias.js";
 import { transcriptionLanguageFields } from "./shared.js";
 import {
   buildProcessInstructions,
@@ -14,7 +15,8 @@ import {
 const provider = "Mistral";
 const transcriptionModel = "voxtral-mini-latest";
 const chatModel = "mistral-large-latest";
-
+// Disable if the live probe rejects context_bias for voxtral-mini-latest.
+export const DICTATION_CONTEXT_BIAS_ENABLED = true;
 
 export async function transcribeAudio(input: TranscribeInput): Promise<ProviderResult> {
   const apiKey = apiKeyOrThrow();
@@ -22,6 +24,9 @@ export async function transcribeAudio(input: TranscribeInput): Promise<ProviderR
     model: transcriptionModel,
     ...transcriptionLanguageFields(input.language)
   });
+  if (DICTATION_CONTEXT_BIAS_ENABLED) {
+    for (const term of contextBiasTerms(input.contextBias ?? [])) formData.append("context_bias", term);
+  }
 
   const result = await postMultipart<{ text: string }>("https://api.mistral.ai/v1/audio/transcriptions", apiKey, formData);
 
