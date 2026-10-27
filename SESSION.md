@@ -116,7 +116,7 @@ ausstehend: Live-Abnahme durch den Menschen (A4 der Specs), danach `verification
 <!-- Echte Blocker, die ein Agent nicht selbst entscheiden darf.
      Leer lassen, wenn keine. -->
 
-- —
+- Freigabe Spec `specs/F-013/spec.md` (eigene Modi) inkl. F1 (Standard-Modi löschbar?).
 
 ---
 
