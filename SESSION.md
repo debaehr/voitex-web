@@ -74,7 +74,7 @@ Lauf 3b (Icon, Anbieter-Listen, Markdown) fertig und live; nächster Schritt Abn
   Ergebnisansicht nach `done` ist nur Klartext (`components/MeetingRecordingResult.tsx`) → Lauf 3.
 - [x] Lauf 2b Backend F-014/v3 + AssemblyAI-Fix (27.10.), Probe in `specs/F-006/plan.md`.
 - [x] Lauf 3 (27.10.): `components/MeetingDetail.tsx`, `MeetingSessions.tsx`, `lib/meeting-file-upload.ts`; 162 Frontend-Tests.
-- [ ] F-015 Claude als Anbieter: Spec-Entwurf `specs/F-015/spec.md`, wartet auf Freigabe (inkl. neuer
+- [ ] F-015 Claude als Anbieter: Spec `specs/F-015/spec.md` freigegeben 27.10., Lauf läuft (inkl.
   Runtime-Abhängigkeit `@anthropic-ai/sdk`). Schlüssel OPENAI (neu) und ANTHROPIC in `.env` (Mensch, 27.10.), beide live gültig.
 - [ ] Lauf 4 Abnahme mit dem Menschen (PC/Android/iPhone), `verification.md`.
 - [x] Lauf 3b (27.10.): Original-Icon + Anbieter-Listen nur mit Schlüssel, ungültige markieren

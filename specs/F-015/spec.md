@@ -1,6 +1,6 @@
 # F-015 — Claude als Anbieter (Textaufgaben)
 
-Status: Entwurf · 27.10.2026
+Status: freigegeben · 27.10.2026 · Freigabe: Mensch, 27.10.2026 (SDK `@anthropic-ai/sdk` erlaubt)
 
 ## Ziel
 
