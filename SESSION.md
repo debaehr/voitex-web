@@ -1,6 +1,6 @@
 # SESSION STATE — voitex-web
 
-> **Letztes Update:** 271026_0835 · **von:** Claude Opus 5.5
+> **Letztes Update:** 271026_0910 · **von:** Claude Opus 5.5
 > **Branch:** main · **Node:** tool-01
 
 <!--
@@ -20,8 +20,9 @@
 <!-- Was wird GERADE bearbeitet? 1–3 Sätze. Kein Roman. -->
 
 Etappe 3: F-006 Meetings-Aufnahme, F-007 Transkript-Upload. Plan `specs/F-006/plan.md`.
-Lauf 1 (Backend) und 1b (Live-Probe Mistral/AssemblyAI) fertig; nächster Schritt
-Lauf 2 (Frontend Aufnahme, Codex, xhigh).
+Dazu F-014 Mistral als Standard (Datenschutz) und F-006 v3 (Sprecher zuordnen vor dem
+Protokoll), beide freigegeben 27.10. Lauf 1 und 1b fertig; Lauf 2 (Frontend Aufnahme) läuft bei
+Codex; danach Lauf 2b (Backend F-014 + v3), dann Lauf 3.
 
 ---
 
@@ -68,7 +69,9 @@ Lauf 2 (Frontend Aufnahme, Codex, xhigh).
 - [x] Lauf 1b Live-Probe bestanden (27.10.), Ergebnis und Befunde für Lauf 3 in `specs/F-006/plan.md`.
   Schlüssel MISTRAL/ASSEMBLYAI in `apps/backend/.env` (Mensch, 27.10.). Testsitzung
   „Probe 1b Mistral“ liegt in `data/meetings/`.
-- [ ] Lauf 2 Frontend Aufnahme, Lauf 3 Ergebnis + Upload, Lauf 4 Abnahme.
+- [ ] Lauf 2 Frontend Aufnahme, 2b Backend F-014/v3, 3 Ergebnis + Upload, 4 Abnahme.
+- [x] `settings.json` auf Mistral umgestellt (Lead, 27.10.; Sicherung `~/backup/voitex-web-data-*`).
+  Achtung: Ein offener Browser-Tab mit altem Stand kann beim Speichern zurückschreiben.
 - [ ] Weitere Wünsche (27.10.):
   - Neu gewünscht: Übersetzer (V2T hatte nur „nach Englisch“). Overlay mit 3 Schaltern:
     links Aufnahmesprache, rechts **Zielsprache** (mind. DE, EN, HR); Modus-Schalter wandert

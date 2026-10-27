@@ -53,6 +53,7 @@
 - `F-013` Eigene Modi mit eigenem Prompt anlegen und löschen — **fertig**
 - `F-006` Langzeitaufnahme bis 3 h mit Sprecherzuordnung (AssemblyAI) und Protokoll — **in-arbeit**
 - `F-007` Meeting-Upload mit Sprecherzuordnung und Zusammenfassung — **in-arbeit**
+- `F-014` Mistral als Standard-Anbieter (Datenschutz) — **in-arbeit**
 
 ## Arbeitsmittel und Daten
 

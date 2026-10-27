@@ -35,3 +35,12 @@ Befunde für Lauf 3:
 2. Aufeinanderfolgende Segmente desselben Sprechers als Absatz zusammenfassen (Lesbarkeit).
 3. Unterbrechungsmarke formatiert UTC (`slice(11,16)`) → Ortszeit Europe/Berlin.
 4. `mergeWithDefaults` übernimmt `providers.meetings` nicht; Einstellungen-Zeile „Meetings“ fehlt.
+
+## Erweiterung nach Freigabe F-006 v3 und F-014 (27.10.2026)
+
+| Lauf | Inhalt | Aufwand |
+|---|---|---|
+| 2b | Backend: F-014 (Defaults/Rückfallwerte `mistral`, Einstellung `meetingFallback` Standard aus, `context_bias` beim Mistral-Diktat), F-006 v3 (`participants`, Status `naming`, Protokoll erst auf Anforderung mit `speakerNames`, Lexikon-Ersetzungen auf Segmente, AssemblyAI-Schlüsselwörter falls unterstützt), Befunde 1–3 aus Lauf 1b. | xhigh (Datenmodell) |
+| 3 | wie oben, zusätzlich: Teilnehmende-Feld (Aufnahme + Upload), Ansicht „Sprecher zuordnen“ (Zitate, ▶ ab Zeitmarke, Namensfelder mit Vorschlägen), Einstellung Ausweiche, neue Modi mit `mistral`. | medium |
+
+Erledigt durch Lead (27.10.): `settings.json` auf `mistral` umgestellt (Sicherung `~/backup/voitex-web-data-*`).

@@ -1,6 +1,6 @@
 # F-006 — Meetings: Langzeitaufnahme bis 3 h mit Sprecherzuordnung und Protokoll
 
-Status: freigegeben · 27.10.2026 · Freigabe: Mensch, 27.10.2026 (F1: Audio automatisch löschen nach Download-Angebot; F2: Protokoll automatisch)
+Status: freigegeben · 27.10.2026 · Freigabe: Mensch, 27.10.2026 (F1: Audio automatisch löschen nach Download-Angebot; F2: Protokoll automatisch) · v3 freigegeben 27.10.2026 (Sprecher zuordnen vor dem Protokoll; ersetzt F2)
 
 ## Ziel
 
@@ -104,7 +104,7 @@ nicht möglich), Sprecher-Wiedererkennung über Sitzungen, Übersetzung des Prot
   Umsetzung: Audio bleibt nach `done` noch **24 h** erhalten; die Ergebnisansicht zeigt
   „Audio herunterladen (wird am … gelöscht)“ und „Jetzt löschen“. Danach löscht der
   Server es automatisch (Prüfung beim Start und stündlich).
-- F2 Protokoll wird automatisch nach der Transkription erzeugt. Mensch, 27.10.2026.
+- F2 ~~Protokoll automatisch~~ — ersetzt durch v3 (Sprecher zuordnen, dann „Protokoll erstellen“). Mensch, 27.10.2026.
 
 ## Abnahme
 
@@ -120,3 +120,31 @@ nicht möglich), Sprecher-Wiedererkennung über Sitzungen, Übersetzung des Prot
 - A4 Am Effekt (Mensch): 15-min-Testaufnahme am PC mit zwei Sprechern (Mistral);
   Fallback-Probe mit AssemblyAI; Unterbrechung auf Android und iPhone → Fortsetzen;
   Neuladen während der Aufnahme → Wiederherstellung; danach eine echte 1–3-h-Sitzung.
+
+## Änderung v3 (freigegeben, Mensch 27.10.2026) — Sprechernamen vor dem Protokoll
+
+Ersetzt F2 („Protokoll automatisch“). V2T-Vorbild: Sprecherfelder nach dem Transkript.
+
+- **Vor dem Start / Upload** optional „Teilnehmende“ (Namen, durch Komma getrennt), gespeichert
+  in der Sitzung als `participants`. Sie wirken dreifach:
+  1. als zusätzliche `context_bias`-Begriffe, damit Namen richtig geschrieben werden;
+  2. als Vorschlagsliste in den Namensfeldern;
+  3. als Teilnehmerliste im Protokoll-Prompt.
+- **Nach der Transkription** neuer Status `naming` („Sprecher zuordnen“) statt direkt
+  `summarizing`. Je erkanntem Sprecher eine Zeile mit:
+  - 2–3 kurzen Zitaten als Erkennungshilfe;
+  - ▶-Knopf, der das Audio ab dem ersten Zitat abspielt (solange das Audio vorhanden ist);
+  - Eingabefeld für den Namen, mit den Teilnehmenden zur Auswahl und dem eigenen Namen als Vorschlag.
+
+  Knöpfe „Protokoll erstellen“ (speichert `speakerNames`, startet den Protokoll-Job) und
+  „Ohne Namen erstellen“. Das Transkript ist sofort sichtbar.
+- Mehrere Teile: Zeilen je „Teil n · Sprecher m“; gleiche Namen führen Sprecher zusammen.
+- Namen bleiben danach änderbar; „Protokoll neu erzeugen“ wie bisher.
+- **Lexikon im Transkript:**
+  - die korrekten Begriffe gehen schon heute als `context_bias` an Mistral (Probe 1b);
+  - neu: die Ersetzungsregeln des Lexikons (falsch → richtig) wirken nach der Transkription
+    auf die Segmenttexte, wie beim Diktat;
+  - AssemblyAI bekommt die Begriffe als Schlüsselwörter, falls das Modell es unterstützt
+    (bei der Umsetzung prüfen, sonst entfällt das).
+- Sprecherzahl oder Stimmen lassen sich Mistral nicht vorgeben; die API kennt nur `context_bias`.
+  Die Zuordnung Sprecher → Name bleibt deshalb ein Schritt nach der Transkription.
