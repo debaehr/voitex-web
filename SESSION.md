@@ -67,7 +67,7 @@ ausstehend: Live-Abnahme durch den Menschen (A4 der Specs), danach `verification
   - Neu gewünscht: Übersetzer (V2T hatte nur „nach Englisch“). Overlay mit 3 Schaltern:
     links Aufnahmesprache, rechts **Zielsprache** (mind. DE, EN, HR); Modus-Schalter wandert
     über den Aufnahmeknopf. Aufnahmesprache um Kroatisch (`hr`) ergänzen. Neues Feature
-    als F-012 angelegt (27.10.), Spec vor Umsetzung.
+    als F-012 angelegt, Spec freigegeben (27.10.), Codex-Lauf läuft.
   - F-006 Langzeitaufnahme: Hintergrund-/Sperrbildschirm-Verhalten am Handy klären
     (iOS stoppt Mikrofon im Hintergrund, Android läuft meist weiter) — in Spec aufnehmen.
     Mensch nutzt **Android und iPhone** → Spec muss beide abdecken (Wake Lock, Chunks,
@@ -115,7 +115,7 @@ ausstehend: Live-Abnahme durch den Menschen (A4 der Specs), danach `verification
 <!-- Echte Blocker, die ein Agent nicht selbst entscheiden darf.
      Leer lassen, wenn keine. -->
 
-- Freigabe Spec `specs/F-012/spec.md` (Übersetzer) inkl. Frage F1 (Snippets übersetzen?).
+- —
 
 ---
 
