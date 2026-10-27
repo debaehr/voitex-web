@@ -9,6 +9,7 @@ const settings = {
   snippets: [{ id: "s", trigger: "Voitex", text: "Snippet content" }],
 } as Settings;
 const fake = () => ({
+  translate: vi.fn<DictationApi["translate"]>(async () => ({ translated: "Translated", provider: "Groq", model: "test" })),
   transcribe: vi.fn<DictationApi["transcribe"]>(async () => ({ transcript: "raw", provider: "OpenAI" })),
   process: vi.fn<DictationApi["process"]>(async () => ({ processed: "Final", provider: "OpenAI" })),
 });
@@ -69,4 +70,49 @@ it("normalizes silent and loud audio into 0..1 levels", () => {
 it("explains permission and device errors", () => {
   expect(recorderError({ name: "NotAllowedError" })).toContain("verweigert");
   expect(recorderError({ name: "NotFoundError" })).toContain("Kein Mikrofon");
+});
+
+it.each(["de", "en", "hr"] as const)("passes target %s through one process call and retains result metadata", async targetLanguage => {
+  const api = fake();
+  const result = await runDictation({ audio: new Blob(), durationSeconds: 2, mode: "formal", language: "de", targetLanguage, settings, api });
+  expect(api.process).toHaveBeenCalledExactlyOnceWith({ transcript: "raw", mode: "formal", provider: "groq", instructions: "Formal", targetLanguage });
+  expect(api.translate).not.toHaveBeenCalled();
+  expect(result).toMatchObject({ targetLanguage, mode: "formal", text: "Final" });
+});
+it("translates corrected snippet hits with the mode provider, preserving snippet input", async () => {
+  const api = fake(), onStage = vi.fn();
+  api.transcribe.mockResolvedValue({ transcript: "foitex!", provider: "OpenAI" });
+  const text = "Ana\nhttps://example.com/{id}\n{{placeholder}}";
+  const result = await runDictation({ audio: new Blob(), durationSeconds: 1, mode: "formal", language: "de", targetLanguage: "hr",
+    settings: { ...settings, snippets: [{ id: "s", trigger: "Voitex", text }] }, api, onStage });
+  expect(api.translate).toHaveBeenCalledExactlyOnceWith({ text, targetLanguage: "hr", provider: "groq" });
+  expect(api.process).not.toHaveBeenCalled();
+  expect(result).toMatchObject({ text: "Translated", raw: "foitex!", targetLanguage: "hr", provider: "Groq", mode: "formal" });
+  expect(onStage.mock.calls.flat()).toEqual(["Transkribiere …", "Übersetze …"]);
+});
+it("keeps source snippets unchanged without either LLM call", async () => {
+  const api = fake(); api.transcribe.mockResolvedValue({ transcript: "foitex", provider: "OpenAI" });
+  const result = await runDictation({ audio: new Blob(), durationSeconds: 1, mode: "original", language: "de", targetLanguage: "source", settings, api });
+  expect(result.text).toBe("Snippet content");
+  expect(api.translate).not.toHaveBeenCalled(); expect(api.process).not.toHaveBeenCalled();
+});
+it("rejects empty translation and propagates failures without falling back to process", async () => {
+  const api = fake(); api.transcribe.mockResolvedValue({ transcript: "foitex", provider: "OpenAI" });
+  const input = { audio: new Blob(), durationSeconds: 1, mode: "formal" as const, language: "de", targetLanguage: "en" as const, settings, api };
+  api.translate.mockResolvedValue({ translated: " ", provider: "Groq", model: "test" });
+  await expect(runDictation(input)).rejects.toThrow("Kein verwertbarer Text erkannt");
+  api.translate.mockRejectedValue(new Error("Translation failed"));
+  await expect(runDictation(input)).rejects.toThrow("Translation failed");
+  expect(api.process).not.toHaveBeenCalled();
+});
+it("uses the starting target while transcription is in flight", async () => {
+  const api = fake();
+  let resolve!: (value: { transcript: string; provider: string }) => void;
+  api.transcribe.mockImplementation(() => new Promise(done => { resolve = done; }));
+  const options = { mode: "formal" as const, language: "de", targetLanguage: "hr" as "hr" | "en", settings };
+  const pending = runDictation({ audio: new Blob(), durationSeconds: 1, ...options, api });
+  options.targetLanguage = "en";
+  resolve({ transcript: "raw", provider: "Groq" });
+  expect((await pending).targetLanguage).toBe("hr");
+  expect(api.process).toHaveBeenCalledWith(expect.objectContaining({ targetLanguage: "hr" }));
 });

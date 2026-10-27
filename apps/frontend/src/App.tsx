@@ -1,8 +1,9 @@
+import { targetLanguages, type TargetLanguage } from "./lib/target-languages";
 import { useEffect, useRef, useState } from "react";
 import { api } from "./lib/api";
 import { HistoryProvider, useHistory } from "./lib/history-context";
 import { runDictation, type DictationMode, type DictationResult } from "./lib/dictation";
-import { modeLabels } from "./lib/history";
+import { resultMeta } from "./lib/history";
 import { readPreference, writePreference } from "./lib/device-preferences";
 import { useRecorder } from "./lib/useRecorder";
 import { MoreHorizontal } from "lucide-react";
@@ -56,13 +57,14 @@ function AppContent() {
   const [theme, setTheme] = useTheme();
   const [mode, setMode] = useState(() => readPreference("voitex-mode", modes.map(item => item.id), "formal"));
   const [language, setLanguage] = useState(() => readPreference("voitex-language", languages.map(item => item.id), "de"));
+  const [targetLanguage, setTargetLanguage] = useState(() => readPreference("voitex-target-language", targetLanguages.map(item => item.id), "source") as TargetLanguage);
   const [busyText, setBusyText] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<DictationResult | null>(null);
   const [message, setMessage] = useState<OverlayMessage | null>(null);
   const messageTimer = useRef<number | null>(null);
   const locked = useRef(false);
   const processing = useRef(false);
-  const recordingOptions = useRef<{ mode: DictationMode; language: string; settings: NonNullable<typeof settings> } | null>(null);
+  const recordingOptions = useRef<{ mode: DictationMode; language: string; targetLanguage: TargetLanguage; settings: NonNullable<typeof settings> } | null>(null);
   const recorder = useRecorder(text => {
     locked.current = false;
     showMessage({ kind: "warning", text });
@@ -70,6 +72,7 @@ function AppContent() {
   const { recording, elapsed, levels } = recorder;
   useEffect(() => { writePreference("voitex-mode", mode); }, [mode]);
   useEffect(() => { writePreference("voitex-language", language); }, [language]);
+  useEffect(() => { writePreference("voitex-target-language", targetLanguage); }, [targetLanguage]);
   useEffect(() => () => {
     if (messageTimer.current) window.clearTimeout(messageTimer.current);
   }, []);
@@ -81,7 +84,7 @@ function AppContent() {
       return;
     }
     locked.current = true;
-    recordingOptions.current = { mode: mode as DictationMode, language, settings: structuredClone(settings) };
+    recordingOptions.current = { mode: mode as DictationMode, language, targetLanguage, settings: structuredClone(settings) };
     setMessage(null);
     setBusyText("Mikrofon wird gestartet …");
     try {
@@ -196,7 +199,7 @@ function AppContent() {
 
         <div className="page-body" style={isTwoLevel ? { overflow: "hidden" } : undefined}>
           {section === "dictation" ? (
-            <DictationView lastResult={lastResult ? { text: lastResult.text, meta: `${modeLabels[lastResult.mode]} · ${lastResult.provider} · ${lastResult.durationSeconds.toFixed(1)} s` } : null} onCopy={copy} />
+            <DictationView lastResult={lastResult ? { text: lastResult.text, meta: resultMeta(lastResult) } : null} onCopy={copy} />
           ) : section === "protocol" ? (
             <ProtocolView />
           ) : section === "meetings" ? (
@@ -219,6 +222,8 @@ function AppContent() {
             languages={languages}
             language={language}
             onLanguageChange={setLanguage}
+            targetLanguage={targetLanguage}
+            onTargetLanguageChange={setTargetLanguage}
             modes={modes}
             mode={mode}
             onModeChange={setMode}

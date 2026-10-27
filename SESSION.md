@@ -67,7 +67,8 @@ ausstehend: Live-Abnahme durch den Menschen (A4 der Specs), danach `verification
   - Neu gewünscht: Übersetzer (V2T hatte nur „nach Englisch“). Overlay mit 3 Schaltern:
     links Aufnahmesprache, rechts **Zielsprache** (mind. DE, EN, HR); Modus-Schalter wandert
     über den Aufnahmeknopf. Aufnahmesprache um Kroatisch (`hr`) ergänzen. Neues Feature
-    als F-012 angelegt, Spec freigegeben (27.10.), Codex-Lauf läuft.
+    als F-012 umgesetzt (27.10., Codex), live; Live-Abnahme A4 durch Mensch offen.
+    Hinweis: LLM-Ausgabe weiterhin auf 1200 Tokens begrenzt (lange Texte können abbrechen).
   - F-006 Langzeitaufnahme: Hintergrund-/Sperrbildschirm-Verhalten am Handy klären
     (iOS stoppt Mikrofon im Hintergrund, Android läuft meist weiter) — in Spec aufnehmen.
     Mensch nutzt **Android und iPhone** → Spec muss beide abdecken (Wake Lock, Chunks,

@@ -1,3 +1,4 @@
+import type { TargetLanguage } from "./target-languages";
 export const settingModes = [
   "original",
   "casual",
@@ -34,6 +35,7 @@ export interface HistoryEntry {
   durationSeconds: number;
   text: string;
   raw: string;
+  targetLanguage?: TargetLanguage;
 }
 export interface Providers {
   stt: string[];

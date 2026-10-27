@@ -1,8 +1,9 @@
+import { targetLanguages, type TargetLanguage } from "../lib/target-languages";
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Check, CheckCircle2, SlidersHorizontal } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, ChevronDown } from "lucide-react";
 
 // Floating capsule bar at the bottom of the main area, modelled on voitex'
-// overlay.html: language chip, record dot, mode chip; while recording a
+// overlay.html: mode above record, source left and target right; while recording a
 // capsule with time, level wave and stop; afterwards a short status text.
 
 export interface OverlayOption {
@@ -20,6 +21,8 @@ interface OverlayBarProps {
   languages: OverlayOption[];
   language: string;
   onLanguageChange: (id: string) => void;
+  targetLanguage: TargetLanguage;
+  onTargetLanguageChange: (id: TargetLanguage) => void;
   modes: OverlayOption[];
   mode: string;
   onModeChange: (id: string) => void;
@@ -36,7 +39,7 @@ interface OverlayBarProps {
 const waveBars = 18;
 
 export function OverlayBar(props: OverlayBarProps) {
-  const [menu, setMenu] = useState<"language" | "mode" | null>(null);
+  const [menu, setMenu] = useState<"language" | "mode" | "target" | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
   // Close an open menu on outside click or Escape, like a native dropdown.
@@ -57,13 +60,15 @@ export function OverlayBar(props: OverlayBarProps) {
   }, [menu]);
 
   const activeLanguage = props.languages.find((item) => item.id === props.language);
-  const menuOptions = menu === "language" ? props.languages : props.modes;
-  const menuValue = menu === "language" ? props.language : props.mode;
+  const activeMode = props.modes.find(item => item.id === props.mode);
+  const activeTarget = targetLanguages.find(item => item.id === props.targetLanguage);
+  const menuOptions = menu === "language" ? props.languages : menu === "target" ? targetLanguages : props.modes;
+  const menuValue = menu === "language" ? props.language : menu === "target" ? props.targetLanguage : props.mode;
 
   return (
     <div className="overlay" ref={rootRef}>
-      {menu && !props.recording ? (
-        <div className="capsule overlay-menu" role="menu" aria-label={menu === "language" ? "Sprache" : "Modus"}>
+      {menu && !props.recording && !props.busyText ? (
+        <div className="capsule overlay-menu" role="menu" aria-label={menu === "language" ? "Aufnahmesprache" : menu === "target" ? "Zielsprache" : "Modus"}>
           {menuOptions.map((option) => (
             <button
               key={option.id}
@@ -73,6 +78,7 @@ export function OverlayBar(props: OverlayBarProps) {
               className="overlay-menu-item"
               onClick={() => {
                 if (menu === "language") props.onLanguageChange(option.id);
+                else if (menu === "target") props.onTargetLanguageChange(option.id as TargetLanguage);
                 else props.onModeChange(option.id);
                 setMenu(null);
               }}
@@ -105,28 +111,42 @@ export function OverlayBar(props: OverlayBarProps) {
           </button>
         </div>
       ) : (
-        <div className="overlay-row">
+        <div className="overlay-controls">
           <button
             type="button"
-            className="capsule overlay-chip"
-            aria-label="Diktatsprache wählen"
-            aria-expanded={menu === "language"}
-            onClick={() => setMenu(menu === "language" ? null : "language")}
-          >
-            {activeLanguage?.short ?? "Auto"}
-          </button>
-          <button type="button" className="capsule overlay-dot" aria-label="Diktat starten" onClick={props.onStart}>
-            <span className="core" />
-          </button>
-          <button
-            type="button"
-            className="capsule overlay-chip"
+            className="capsule overlay-chip overlay-mode"
             aria-label="Modus wählen"
             aria-expanded={menu === "mode"}
+            aria-haspopup="menu"
             onClick={() => setMenu(menu === "mode" ? null : "mode")}
           >
-            <SlidersHorizontal />
+            {activeMode?.label}<ChevronDown aria-hidden />
           </button>
+          <div className="overlay-row">
+            <button
+              type="button"
+              className="capsule overlay-chip"
+              aria-label="Diktatsprache wählen"
+              aria-haspopup="menu"
+              aria-expanded={menu === "language"}
+              onClick={() => setMenu(menu === "language" ? null : "language")}
+            >
+              {activeLanguage?.short ?? "Auto"}<ChevronDown aria-hidden />
+            </button>
+            <button type="button" className="capsule overlay-dot" aria-label="Diktat starten" onClick={props.onStart}>
+              <span className="core" />
+            </button>
+            <button
+              type="button"
+              className="capsule overlay-chip"
+              aria-label="Zielsprache wählen"
+              aria-haspopup="menu"
+              aria-expanded={menu === "target"}
+              onClick={() => setMenu(menu === "target" ? null : "target")}
+            >
+              {activeTarget?.short ?? "="}<ChevronDown aria-hidden />
+            </button>
+          </div>
         </div>
       )}
     </div>

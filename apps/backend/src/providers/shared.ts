@@ -21,16 +21,31 @@ export type ProcessInput = {
   mode: WorkMode;
   instructions?: string;
   translateToEnglish?: boolean;
+  targetLanguage?: TargetLanguage;
 };
+
+export const targetLanguageNames = { de: "Deutsch", en: "Englisch", hr: "Kroatisch" } as const;
+export type TranslationLanguage = keyof typeof targetLanguageNames;
+export type TargetLanguage = "source" | TranslationLanguage;
+
+export function isTranslationLanguage(value: unknown): value is TranslationLanguage {
+  return typeof value === "string" && Object.hasOwn(targetLanguageNames, value);
+}
+
+export function isTargetLanguage(value: unknown): value is TargetLanguage {
+  return value === "source" || isTranslationLanguage(value);
+}
+
+export function buildTranslationInstructions(language: TranslationLanguage): string {
+  return `Übersetze den folgenden Text ausschließlich auf ${targetLanguageNames[language]}. Übersetze nur, ohne den Text umzuschreiben, etwas hinzuzufügen oder wegzulassen. Erhalte Inhalt, Zeilenumbrüche, URLs, Namen und Platzhalter unverändert. Gib nur die Übersetzung zurück, keine Erklärung und keine Überschrift.`;
+}
 
 export function buildProcessInstructions(input: ProcessInput, defaults: Record<WorkMode, string>) {
   const base = input.instructions?.trim() || defaults[input.mode];
-
-  if (!input.translateToEnglish) {
-    return base;
-  }
-
-  return `${base}\n\nZusatzaufgabe: Gib ausschließlich das finale Ergebnis auf Englisch aus. Übersetze natürlich und fachlich sauber. Gib keinen deutschen Text, keine Gegenüberstellung, keine Erklärung und keine Überschrift zurück.`;
+  // An explicit target wins over the legacy English-only flag.
+  const target = input.targetLanguage ?? (input.translateToEnglish ? "en" : "source");
+  if (target === "source") return base;
+  return `${base}\n\nZusatzaufgabe: Gib ausschließlich das finale Ergebnis auf ${targetLanguageNames[target]} aus. Übersetze natürlich und fachlich sauber. Gib keine Gegenüberstellung, keine Erklärung und keine Überschrift zurück.`;
 }
 
 export async function postJson<T>(url: string, apiKey: string, body: unknown): Promise<T> {

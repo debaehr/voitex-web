@@ -1178,3 +1178,42 @@ textarea {
 .list-no-results { padding: 16px; color: var(--muted-foreground); }
 .list-sort { width: auto; }
 @media (max-width: 767px) { .dialog-panel input, .dialog-panel textarea, .detail-inner input, .detail-inner textarea, .detail-inner select { font-size: 16px; } }
+
+/* F-012: keep the record control centered between source and target. */
+.overlay-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.overlay-controls .overlay-row {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) 44px minmax(80px, 1fr);
+  gap: 8px;
+}
+
+.overlay-controls .overlay-chip {
+  gap: 4px;
+  min-height: 44px;
+}
+
+.overlay-controls .overlay-mode {
+  max-width: 220px;
+}
+
+.overlay {
+  max-width: calc(100% - 32px);
+}
+
+.overlay-menu,
+.overlay-text {
+  max-width: 100%;
+}
+
+.overlay-dot:focus-visible,
+.overlay-chip:focus-visible,
+.overlay-menu-item:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}

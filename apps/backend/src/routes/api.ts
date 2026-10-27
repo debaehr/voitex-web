@@ -6,6 +6,8 @@ import { isProvider, processTranscript, transcribeAudio, WorkMode } from "../pro
 import { defaultPrompts, defaultSummaryPrompt } from "../prompts.js";
 import { transcribeMeeting } from "../providers/assemblyai.js";
 
+import { buildTranslationInstructions, isTargetLanguage, isTranslationLanguage } from "../providers/shared.js";
+
 const validWorkModes: WorkMode[] = ["original", "casual", "formal", "coding"];
 
 // Only a missing file counts as empty state. A malformed file throws, so callers
@@ -126,6 +128,10 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
     void handleTranscribe(req, res);
   });
 
+  apiRouter.post("/translate", (req, res) => {
+    void handleTranslate(req, res);
+  });
+
   apiRouter.post("/process", (req, res) => {
     void handleProcess(req, res);
   });
@@ -231,6 +237,33 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
     }
   }
 
+  async function handleTranslate(req: Request, res: Response) {
+    const { text, targetLanguage, provider } = req.body ?? {};
+    if (typeof text !== "string" || !text.trim()) {
+      sendError(res, 400, "Missing text.");
+      return;
+    }
+    if (!isTranslationLanguage(targetLanguage)) {
+      sendError(res, 400, "Invalid target language.");
+      return;
+    }
+    if (!isProvider(provider)) {
+      sendError(res, 400, "Invalid provider.");
+      return;
+    }
+    try {
+      const result = await processTranscript(provider, {
+        transcript: text,
+        mode: "original",
+        instructions: buildTranslationInstructions(targetLanguage)
+      });
+      res.json({ translated: result.text, provider: result.provider, model: result.model });
+    } catch (error) {
+      console.error("Translation failed", error);
+      sendInternalError(res, "Translation failed.");
+    }
+  }
+
   async function handleProcess(req: Request, res: Response) {
     const transcript = String(req.body?.transcript ?? "").trim();
     const mode = String(req.body?.mode ?? "formal") as WorkMode;
@@ -254,7 +287,12 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
     try {
       const instructions = typeof req.body?.instructions === "string" ? req.body.instructions : undefined;
       const translateToEnglish = req.body?.translateToEnglish === true;
-      const result = await processTranscript(provider, { transcript, mode, instructions, translateToEnglish });
+      const targetLanguage = req.body?.targetLanguage;
+      if (targetLanguage !== undefined && !isTargetLanguage(targetLanguage)) {
+        sendError(res, 400, "Invalid target language.");
+        return;
+      }
+      const result = await processTranscript(provider, { transcript, mode, instructions, translateToEnglish, targetLanguage });
       res.json({ processed: result.text, provider: result.provider, model: result.model });
     } catch (error) {
       console.error("Processing failed", error);
@@ -297,7 +335,8 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
   }
 
   async function handlePutHistory(req: Request, res: Response) {
-    if (!Array.isArray(req.body)) {
+    if (!Array.isArray(req.body) || !req.body.every(entry =>
+      !isRecord(entry) || entry.targetLanguage === undefined || isTargetLanguage(entry.targetLanguage))) {
       sendError(res, 400, "Invalid body: expected array.");
       return;
     }
@@ -391,6 +430,7 @@ function isValidSettings(value: unknown): boolean {
 
 function isValidHistoryEntry(value: unknown): value is Record<string, unknown> & { id: string; text: string } {
   return isRecord(value) && typeof value.id === "string" && value.id.trim().length > 0 &&
+    (value.targetLanguage === undefined || isTargetLanguage(value.targetLanguage)) &&
     typeof value.text === "string" && value.text.trim().length > 0 &&
     ["mode", "provider", "createdAt", "raw"].every(key => value[key] === undefined || typeof value[key] === "string") &&
     (value.durationSeconds === undefined || (typeof value.durationSeconds === "number" && Number.isFinite(value.durationSeconds)));

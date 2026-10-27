@@ -1,5 +1,5 @@
 import { modeInstructions } from "../prompts.js";
-import { transcriptionLanguageFields } from "./shared.js";
+import { buildProcessInstructions, transcriptionLanguageFields } from "./shared.js";
 import OpenAI, { toFile } from "openai";
 import { ProcessInput } from "./shared.js";
 
@@ -33,7 +33,7 @@ export async function processTranscript(input: ProcessInput) {
   assertApiKey();
   const client = createClient();
 
-  const instructions = buildInstructions(input);
+  const instructions = buildProcessInstructions(input, modeInstructions);
   const response = await client.responses.create({
     model: "gpt-4o-mini",
     instructions,
@@ -59,14 +59,4 @@ function createClient() {
   return new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
   });
-}
-
-function buildInstructions(input: ProcessInput) {
-  const base = input.instructions?.trim() || modeInstructions[input.mode];
-
-  if (!input.translateToEnglish) {
-    return base;
-  }
-
-  return `${base}\n\nZusatzaufgabe: Gib ausschließlich das finale Ergebnis auf Englisch aus. Übersetze natürlich und fachlich sauber. Gib keinen deutschen Text, keine Gegenüberstellung, keine Erklärung und keine Überschrift zurück.`;
 }

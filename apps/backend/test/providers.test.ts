@@ -1,6 +1,7 @@
+import { modeInstructions } from "../src/prompts.js";
 import { afterEach, expect, it, vi } from "vitest";
-const { create } = vi.hoisted(() => ({ create: vi.fn(async () => ({ text: "transcript" })) }));
-vi.mock("openai", () => ({ default: class { audio = { transcriptions: { create } }; }, toFile: vi.fn(async () => "file") }));
+const { create, respond } = vi.hoisted(() => ({ create: vi.fn(async () => ({ text: "transcript" })), respond: vi.fn(async () => ({ output_text: "Final" })) }));
+vi.mock("openai", () => ({ default: class { responses = { create: respond }; audio = { transcriptions: { create } }; }, toFile: vi.fn(async () => "file") }));
 import * as openai from "../src/providers/openai.js";
 import * as mistral from "../src/providers/mistral.js";
 import * as groq from "../src/providers/groq.js";
@@ -28,3 +29,20 @@ it("passes prompt to the OpenAI SDK transcription request", async () => {
   await openai.transcribeAudio({ buffer: Buffer.from("audio"), filename: "test.webm", mimetype: "audio/webm", prompt: "Voitex" });
   expect(create).toHaveBeenCalledWith(expect.objectContaining({ prompt: "Voitex" }));
 });
+
+for (const [name, provider] of Object.entries({ openai, mistral, groq })) {
+  it.each(["de", "en", "hr", "source", undefined] as const)(`${name} uses shared processing instructions for %s`, async targetLanguage => {
+    vi.stubEnv(`${name.toUpperCase()}_API_KEY`, "test-key");
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: "Final" } }] })));
+    vi.stubGlobal("fetch", fetchMock);
+    const input = { transcript: "Raw", mode: "formal" as const, instructions: "Custom", targetLanguage };
+    const { buildProcessInstructions } = await import("../src/providers/shared.js");
+    await provider.processTranscript(input);
+    if (name === "openai") {
+      expect(respond).toHaveBeenCalledWith(expect.objectContaining({ instructions: buildProcessInstructions(input, modeInstructions) }));
+    } else {
+      const call = fetchMock.mock.calls[0] as unknown as [string, { body: string }];
+      expect(JSON.parse(call[1].body).messages[0].content).toBe(buildProcessInstructions(input, modeInstructions));
+    }
+  });
+}

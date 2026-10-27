@@ -1,4 +1,4 @@
-import type { ProcessingRequest, TranscriptionRequest } from "./dictation";
+import type { ProcessingRequest, TranscriptionRequest, TranslationRequest } from "./dictation";
 import type { HistoryEntry, Providers, Settings } from "./types";
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
@@ -49,6 +49,8 @@ export const api = {
   },
   process: (input: ProcessingRequest) =>
     request<{ processed: string; provider: string }>("/process", json("POST", input)),
+  translate: (input: TranslationRequest) =>
+    request<{ translated: string; provider: string; model: string | null }>("/translate", json("POST", input)),
   getProviders: () => request<Providers>("/providers"),
   getDefaults: () => request<Settings>("/settings/defaults"),
   getSettings: () => request<Partial<Settings>>("/settings"),

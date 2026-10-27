@@ -6,7 +6,7 @@ import { Button, Card, CardContent, Field, Input } from "../components/ui";
 import { useHistory } from "../lib/history-context";
 import { useSettings } from "../lib/settings-context";
 import { findDuplicateSpoken } from "../lib/lexicon";
-import { exportHistory, filterHistory, modeLabels, sortHistory } from "../lib/history";
+import { exportHistory, filterHistory, modeLabels, resultMeta, sortHistory } from "../lib/history";
 import { readPreference, writePreference } from "../lib/device-preferences";
 
 export function HistoryView() {
@@ -100,7 +100,7 @@ export function HistoryView() {
     >
       {active ? <Card><CardContent style={{ paddingTop: 20 }}>
         <div className="row between">
-          <span className="muted">{modeLabels[active.mode]} · {active.provider} · {active.durationSeconds.toFixed(1)} s</span>
+          <span className="muted">{resultMeta(active)}</span>
           <span className="muted text-xs">{new Date(active.createdAt).toLocaleString("de-DE")}</span>
         </div>
         <div className="stack" style={{ gap: 4 }}>
