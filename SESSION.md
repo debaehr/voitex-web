@@ -1,6 +1,6 @@
 # SESSION STATE — voitex-web
 
-> **Letztes Update:** 271026_1150 · **von:** Claude Opus 5.5
+> **Letztes Update:** 271026_1530 · **von:** Claude Opus 5.5
 > **Branch:** main · **Node:** tool-01
 
 <!--
@@ -23,7 +23,8 @@ Etappe 3: F-006 Meetings-Aufnahme, F-007 Transkript-Upload. Plan `specs/F-006/pl
 Dazu F-014 Mistral als Standard (Datenschutz) und F-006 v3 (Sprecher zuordnen vor dem
 Protokoll), beide freigegeben 27.10. Lauf 1, 1b, 2 (Frontend Aufnahme) und 2b (Backend F-014 + v3) fertig und live;
 Lauf 3 (Frontend Ergebnis, Sprecher zuordnen, Upload, Einstellungen) fertig und live;
-Lauf 3b (Icon, Anbieter-Listen, Markdown) fertig und live; nächster Schritt Abnahme (Lauf 4) mit dem Menschen.
+Lauf 3b (Icon, Anbieter-Listen, Markdown) fertig und live; Abnahme (Lauf 4) läuft. Neu freigegeben: Systemton mit aufnehmen
+(`specs/changes/2026-10-27-systemton.md`), Lauf 5 an Codex (medium).
 
 ---
 
