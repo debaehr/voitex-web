@@ -49,5 +49,6 @@ export interface MeetingDetailData extends MeetingSummary {
   protocol: string; transcript: string; participants?: string[]; speakerNames: Record<string, string>;
   segments: MeetingSegment[]; parts: Array<{ part: number; contentType: string; durationSeconds?: number }>;
   interruptions: Array<{ afterPart: number; start: string; end: string; text: string }>;
+  protocolLanguage?: string; protocolProvider?: string; protocolModel?: string | null;
   transcribedAt?: string; providerAttempts?: Array<{ provider: MeetingProvider; ok: boolean; reason?: string }>;
 }

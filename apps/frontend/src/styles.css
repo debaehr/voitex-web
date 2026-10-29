@@ -1302,3 +1302,12 @@ textarea {
 .meeting-protocol-table table { width: 100%; border-collapse: collapse; font-size: 14px; color: var(--foreground); }
 .meeting-protocol-table th, .meeting-protocol-table td { min-width: 8rem; padding: 6px 10px; border: 1px solid var(--border); vertical-align: top; }
 .meeting-protocol-table th { background: var(--muted); font-weight: 600; }
+
+/* Keep correction controls readable beside long transcripts and on narrow screens. */
+.transcript-paragraph { border-top: 1px solid var(--border); padding-top: 16px; }
+.transcript-paragraph > .select { max-width: 320px; }
+.transcript-paragraph summary { cursor: pointer; color: var(--muted-foreground); }
+.transcript-segments { margin-top: 12px; padding-left: 16px; border-left: 2px solid var(--border); }
+.transcript-segments p { margin: 0; }
+.transcript-segments .select { max-width: 320px; }
+.protocol-actions { align-items: end; }

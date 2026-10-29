@@ -56,10 +56,12 @@ export const api = {
   finishMeeting: (id: string, input: FinishMeeting) => meetingRequest(`/meetings/${encodeURIComponent(id)}/finish`, json("POST", input)),
   getMeeting: (id: string) => meetingRequest<MeetingDetailData>(`/meetings/${encodeURIComponent(id)}`),
   listMeetings: () => meetingRequest<MeetingSummary[]>("/meetings"),
-  patchMeeting: (id: string, input: { title?: string; speakerNames?: Record<string, string> }) =>
+  patchMeeting: (id: string, input: { title?: string; speakerNames?: Record<string, string>; segmentSpeakers?: Record<string, string>; resetSpeakers?: true }) =>
     meetingRequest<MeetingDetailData>(`/meetings/${encodeURIComponent(id)}`, json("PATCH", input)),
-  protocolMeeting: (id: string, speakerNames?: Record<string, string>) =>
-    meetingRequest(`/meetings/${encodeURIComponent(id)}/protocol`, speakerNames === undefined ? { method: "POST" } : json("POST", { speakerNames })),
+  protocolMeeting: (id: string, speakerNames?: Record<string, string>, protocolLanguage?: string) =>
+    meetingRequest(`/meetings/${encodeURIComponent(id)}/protocol`, speakerNames === undefined && !protocolLanguage ? { method: "POST" } : json("POST", {
+      ...(speakerNames === undefined ? {} : { speakerNames }), ...(protocolLanguage ? { protocolLanguage } : {})
+    })),
   deleteMeetingAudio: (id: string) => meetingRequest(`/meetings/${encodeURIComponent(id)}/audio`, { method: "DELETE" }),
   retryMeeting: (id: string, provider?: MeetingProvider) => meetingRequest(`/meetings/${encodeURIComponent(id)}/retry`, json("POST", provider ? { provider } : {})),
   deleteMeeting: async (id: string) => {

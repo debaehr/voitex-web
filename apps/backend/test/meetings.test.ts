@@ -245,7 +245,7 @@ describe("meeting jobs", () => {
 });
 
 describe("audio retention", () => {
-  it("retains audio for 24 hours after naming, removes it after expiry and keeps the transcript", async () => {
+  it("retains audio for seven days after naming, removes it after expiry and keeps the transcript", async () => {
     const { create, chunk, finish, request, service } = await start(); const id = await create(); await chunk(id); const done = await finish(id);
     expect(Date.parse(done.audioExpiresAt!) - Date.parse(done.transcribedAt!)).toBeCloseTo(AUDIO_RETENTION_MS, -2);
     await service.cleanup(Date.parse(done.audioExpiresAt!) - 1); expect((await request(`/meetings/${id}/audio`)).status).toBe(200);
@@ -268,6 +268,7 @@ describe("audio retention", () => {
     await first.request(`/meetings/${id}/protocol`, "POST", {}); await first.service.idle();
     expect((await first.service.get(id)).audioExpiresAt).toBe(done.audioExpiresAt);
     await first.service.dispose(); done.audioExpiresAt = new Date(Date.now() - 1).toISOString();
+    done.transcribedAt = new Date(Date.now() - AUDIO_RETENTION_MS - 1).toISOString();
     await writeFile(join(dir, "meetings", id, "meeting.json"), JSON.stringify(done));
     const second = await start({ resumeMeetingJobs: true }); expect((await second.request(`/meetings/${id}/audio`)).status).toBe(404);
   });

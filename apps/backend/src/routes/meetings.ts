@@ -104,18 +104,24 @@ export function createMeetingRouter(service: MeetingService, ready: Promise<void
   }));
   router.post("/meetings/:id/protocol", route(ready, async (req, res) => {
     const input = req.body === undefined ? {} : req.body;
-    if (!isRecord(input) || Object.keys(input).some(key => key !== "speakerNames")) invalid();
-    await service.protocol(req.params.id as string, speakerNames(input.speakerNames));
+    if (!isRecord(input) || Object.keys(input).some(key => !["speakerNames", "protocolLanguage"].includes(key)) ||
+        input.protocolLanguage !== undefined && (typeof input.protocolLanguage !== "string" || !/^(auto|[a-z]{2,3}(?:-[A-Za-z]{2})?)$/.test(input.protocolLanguage))) invalid();
+    await service.protocol(req.params.id as string, speakerNames(input.speakerNames), input.protocolLanguage);
     res.status(202).json({ status: "queued" });
   }));
   router.patch("/meetings/:id", route(ready, async (req, res) => {
     const input = req.body;
-    if (!isRecord(input) || !Object.keys(input).length || Object.keys(input).some(key => !["title", "speakerNames", "participants"].includes(key)) ||
-        input.title !== undefined && !validTitle(input.title)) invalid();
+    if (!isRecord(input) || !Object.keys(input).length || Object.keys(input).some(key => !["title", "speakerNames", "participants", "segmentSpeakers", "resetSpeakers"].includes(key)) ||
+        input.title !== undefined && !validTitle(input.title) ||
+        input.resetSpeakers !== undefined && input.resetSpeakers !== true ||
+        input.resetSpeakers !== undefined && input.segmentSpeakers !== undefined ||
+        input.segmentSpeakers !== undefined && (!isRecord(input.segmentSpeakers) || Object.entries(input.segmentSpeakers).some(([index, id]) => !/^(0|[1-9][0-9]*)$/.test(index) || typeof id !== "string"))) invalid();
     res.json(await service.patch(req.params.id as string, {
       ...(input.title !== undefined ? { title: input.title } : {}),
       ...(input.participants !== undefined ? { participants: participants(input.participants) } : {}),
-      ...(input.speakerNames !== undefined ? { speakerNames: speakerNames(input.speakerNames) } : {})
+      ...(input.speakerNames !== undefined ? { speakerNames: speakerNames(input.speakerNames) } : {}),
+      ...(input.segmentSpeakers !== undefined ? { segmentSpeakers: input.segmentSpeakers as Record<string, string> } : {}),
+      ...(input.resetSpeakers === true ? { resetSpeakers: true } : {})
     }));
   }));
   router.delete("/meetings/:id", route(ready, async (req, res) => {

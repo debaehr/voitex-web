@@ -10,7 +10,7 @@ import { contextBiasTerms } from "./context-bias.js";
 import { applyLexicon, lexiconEntries } from "./lexicon.js";
 
 export const CHUNK_LIMIT_BYTES = 10 * 1024 * 1024;
-export const AUDIO_RETENTION_MS = 24 * 60 * 60 * 1000;
+export const AUDIO_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 export type MeetingStatus = "queued" | "transcribing" | "naming" | "summarizing" | "done" | "error";
 export type MeetingPart = {
   part: number;
@@ -37,7 +37,7 @@ export type Meeting = {
   interruptions: Array<{ afterPart: number; start: string; end: string; text: string }>;
   transcript: string; protocol: string;
   provider?: MeetingProvider; model?: string;
-  protocolProvider?: string; protocolModel?: string | null;
+  protocolProvider?: string; protocolModel?: string | null; protocolLanguage?: string;
   audioExpiresAt?: string; audioDeletedAt?: string;
   // Persist the phase so restart/retry can reuse a completed transcription.
   job?: "transcribe" | "protocol"; requestedProvider?: MeetingProvider;
@@ -93,6 +93,43 @@ function formatTime(seconds: number) {
 }
 const berlinTime = new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 
+// Use the same provider ordering for transcription and reset so older files need no migration.
+function originalSpeakers(segments: Array<MeetingSegment & { part: number }>): DisplaySegment[] {
+  const parts = new Map<number, Map<string, string>>();
+  return segments.map(segment => {
+    let labels = parts.get(segment.part);
+    if (!labels) { labels = new Map(); parts.set(segment.part, labels); }
+    if (!labels.has(segment.speaker)) labels.set(segment.speaker, `Sprecher ${labels.size + 1}`);
+    const label = labels.get(segment.speaker)!;
+    return { ...segment, speakerId: `${segment.part}:${segment.speaker}`,
+      speakerLabel: segment.part > 1 ? `Teil ${segment.part} · ${label}` : label };
+  });
+}
+function reassignSpeakers(meeting: Meeting, assignments: Record<string, string>) {
+  const known = new Map(meeting.segments.map(segment => [segment.speakerId, { part: segment.part, label: segment.speakerLabel }]));
+  for (const [index, id] of Object.entries(assignments)) {
+    if (!/^(0|[1-9][0-9]*)$/.test(index) || !Number.isSafeInteger(Number(index)) || Number(index) >= meeting.segments.length) {
+      throw new MeetingError(400, "Invalid segment index.");
+    }
+    const segment = meeting.segments[Number(index)];
+    const speaker = known.get(id);
+    if (speaker) {
+      if (speaker.part !== segment.part) throw new MeetingError(400, "Speaker belongs to another part.");
+    } else {
+      if (!new RegExp(`^${segment.part}:manual-[1-9][0-9]*$`).test(id)) throw new MeetingError(400, "Unknown speaker id.");
+      const occupied = new Set([...known.values()].filter(item => item.part === segment.part).map(item => item.label));
+      let number = 1;
+      const label = () => `${segment.part > 1 ? `Teil ${segment.part} · ` : ""}Sprecher ${number}`;
+      while (occupied.has(label())) number++;
+      known.set(id, { part: segment.part, label: label() });
+    }
+  }
+  // Validate the whole operation before replacing any assignments; change() writes atomically.
+  meeting.segments = meeting.segments.map((segment, index) => {
+    const id = Object.hasOwn(assignments, String(index)) ? assignments[String(index)] : segment.speakerId;
+    return { ...segment, speakerId: id, speakerLabel: known.get(id)!.label };
+  });
+}
 function saveSpeakerNames(meeting: Meeting, names: Record<string, string>) {
   const known = new Set(meeting.segments.map(segment => segment.speakerId));
   for (const key of Object.keys(names)) if (!known.has(key)) throw new MeetingError(400, "Unknown speaker id.");
@@ -202,16 +239,26 @@ export class MeetingService {
     });
     this.enqueue(id);
   }
-  async protocol(id: string, speakerNames?: Record<string, string>) {
+  async protocol(id: string, speakerNames?: Record<string, string>, protocolLanguage?: string) {
     await this.change(id, meeting => {
       if (this.scheduled.has(id) || !["naming", "done"].includes(meeting.status) || !meeting.segments.length) throw new MeetingError(409, "Meeting transcript is not ready.");
       if (speakerNames) saveSpeakerNames(meeting, speakerNames);
+      // An omitted target explicitly restores the meeting language on regeneration.
+      if (protocolLanguage === undefined) delete meeting.protocolLanguage;
+      else meeting.protocolLanguage = protocolLanguage;
       meeting.job = "protocol"; meeting.status = "queued"; meeting.progress = 0; delete meeting.error;
     });
     this.enqueue(id);
   }
-  async patch(id: string, input: { title?: string; speakerNames?: Record<string, string>; participants?: string[] }) {
+  async patch(id: string, input: { title?: string; speakerNames?: Record<string, string>; participants?: string[]; segmentSpeakers?: Record<string, string>; resetSpeakers?: true }) {
     return this.change(id, meeting => {
+      if (input.segmentSpeakers !== undefined || input.resetSpeakers) {
+        if (this.scheduled.has(id) || !["naming", "done"].includes(meeting.status)) throw new MeetingError(409, "Meeting transcript is not ready.");
+        if (input.resetSpeakers && input.segmentSpeakers !== undefined) throw new MeetingError(400, "Conflicting speaker changes.");
+        if (input.resetSpeakers) meeting.segments = originalSpeakers(meeting.segments);
+        else reassignSpeakers(meeting, input.segmentSpeakers!);
+        meeting.transcript = renderTranscript(meeting);
+      }
       if (input.title !== undefined) meeting.title = input.title;
       if (input.participants !== undefined) {
         if (this.scheduled.has(id)) throw new MeetingError(409, "Meeting is still processing.");
@@ -262,8 +309,37 @@ export class MeetingService {
       }
     }
   }
+  private async extendAudioRetention() {
+    for (const meeting of await this.list()) {
+      if (meeting.audioDeletedAt || !meeting.transcribedAt) continue;
+      const minimum = Date.parse(meeting.transcribedAt) + AUDIO_RETENTION_MS;
+      if (!Number.isFinite(minimum) || meeting.audioExpiresAt && Date.parse(meeting.audioExpiresAt) >= minimum) continue;
+      await withFileLock(this.path(meeting.id), async () => {
+        const current = await this.get(meeting.id);
+        if (current.audioDeletedAt || !current.transcribedAt) return;
+        const expires = Date.parse(current.transcribedAt) + AUDIO_RETENTION_MS;
+        if (!Number.isFinite(expires) || current.audioExpiresAt && Date.parse(current.audioExpiresAt) >= expires) return;
+        for (const part of current.parts) {
+          try {
+            if (!(await stat(join(this.partDirectory(current.id, part.part), audioName(part)))).isFile()) continue;
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+            throw error;
+          }
+          current.audioExpiresAt = new Date(expires).toISOString();
+          current.updatedAt = new Date().toISOString();
+          await writeJsonFile(this.path(current.id), current);
+          break;
+        }
+      });
+    }
+  }
   async start(options: { resume: boolean; retentionTimer: boolean }) {
-    if (options.resume || options.retentionTimer) await this.cleanup();
+    if (options.resume || options.retentionTimer) {
+      // Extend surviving audio before cleanup can apply its previous 24-hour expiry.
+      await this.extendAudioRetention();
+      await this.cleanup();
+    }
     if (options.resume) {
       for (const meeting of await this.list()) {
         if (meeting.finishedAt && ["queued", "transcribing", "summarizing"].includes(meeting.status)) {
@@ -347,13 +423,9 @@ export class MeetingService {
             meetingFallback: settings.meetingFallback === true,
             provider: meeting.requestedProvider ?? (settings.providers?.meetings === "assemblyai" ? "assemblyai" : "mistral")
           });
-          const labels = new Map<string, string>();
-          const segments: DisplaySegment[] = result.segments.map(segment => {
-            if (!labels.has(segment.speaker)) labels.set(segment.speaker, `Sprecher ${labels.size + 1}`);
-            const label = labels.get(segment.speaker)!;
-            return { ...segment, text: applyLexicon(segment.text, lexicon).trim(), part: part.part, speakerId: `${part.part}:${segment.speaker}`,
-              speakerLabel: part.part > 1 ? `Teil ${part.part} · ${label}` : label };
-          });
+          const segments = originalSpeakers(result.segments.map(segment => ({
+            ...segment, text: applyLexicon(segment.text, lexicon).trim(), part: part.part
+          })));
           await this.change(id, current => {
             current.providerAttempts ??= [];
             current.providerAttempts.push(...(result.attempts ?? []));
@@ -388,8 +460,12 @@ export class MeetingService {
       const provider = settings.providers?.[task] ?? "mistral";
       if (!isProvider(provider)) throw new Error("Invalid protocol provider.");
       const transcript = [meeting.participants?.length ? `Teilnehmende: ${meeting.participants.join(", ")}` : "", renderTranscript(meeting)].filter(Boolean).join("\n\n");
-      const result = await processTranscript(provider, { transcript, mode: "formal", task,
-        instructions: typeof settings.prompts?.[task] === "string" ? settings.prompts[task] : defaultPrompts[task] });
+      let instructions = typeof settings.prompts?.[task] === "string" ? settings.prompts[task] : defaultPrompts[task];
+      if (meeting.protocolLanguage && meeting.protocolLanguage !== "auto" && meeting.protocolLanguage !== meeting.language) {
+        const language = new Intl.DisplayNames(["de"], { type: "language" }).of(meeting.protocolLanguage) ?? meeting.protocolLanguage;
+        instructions += `\n\nSchreibe ${task === "protocol" ? "das gesamte Protokoll" : "die gesamte Zusammenfassung"} auf ${language}. Übersetze auch Zitate. Namen, Firmen- und Produktnamen sowie Lexikon-Begriffe bleiben unverändert.`;
+      }
+      const result = await processTranscript(provider, { transcript, mode: "formal", task, instructions });
       await this.change(id, current => {
         current.protocol = result.text; current.protocolProvider = result.provider; current.protocolModel = result.model;
         current.status = "done"; current.progress = 100; current.completedAt = new Date().toISOString();

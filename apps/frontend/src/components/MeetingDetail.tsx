@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { Markdown } from "./Markdown";
 import { Play } from "lucide-react";
 import { api } from "../lib/api";
-import { downloadFile } from "../lib/download";
+import { downloadFile, meetingFileName } from "../lib/download";
 import type { MeetingDetailData, MeetingProvider } from "../lib/meeting-types";
-import { audioAvailable, audioUrl, isMeetingProcessing, meetingDate, meetingLabels, meetingMeta, meetingTranscript, nonEmptyNames } from "../lib/meeting-presentation";
+import { audioAvailable, audioUrl, isMeetingProcessing, meetingDate, meetingLabels, meetingMeta, meetingTranscript, nonEmptyNames, speakerQuotes } from "../lib/meeting-presentation";
 import { ConfirmDialog } from "./Dialog";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Field, Input } from "./ui";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Field, Input, Select } from "./ui";
+import { MeetingTranscript } from "./MeetingTranscript";
+import { protocolLanguageName, protocolLanguages, readProtocolLanguage, saveProtocolLanguage } from "../lib/protocol-language";
 
 interface Props {
   id: string; ownSpeakerName?: string; initial?: MeetingDetailData;
@@ -17,11 +19,13 @@ export function MeetingDetail({ id, ownSpeakerName, initial, onChanged, onDelete
   const [title, setTitle] = useState(initial?.title ?? "");
   const [names, setNames] = useState<Record<string, string>>(initial?.speakerNames ?? {});
   const [editing, setEditing] = useState(false);
+  const [protocolLanguage, setProtocolLanguage] = useState(readProtocolLanguage);
+  const [protocolStale, setProtocolStale] = useState(false);
   const [busy, setBusy] = useState(false);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [confirm, setConfirm] = useState<"audio" | "meeting" | null>(null);
+  const [confirm, setConfirm] = useState<"audio" | "meeting" | "speakers" | null>(null);
   const [now, setNow] = useState(Date.now());
   const callbacks = useRef({ onChanged, onDeleted, onResult });
   callbacks.current = { onChanged, onDeleted, onResult };
@@ -64,16 +68,17 @@ export function MeetingDetail({ id, ownSpeakerName, initial, onChanged, onDelete
   }, [meeting?.audioExpiresAt]);
   const hasAudio = !!meeting && audioAvailable(meeting, now);
   useEffect(() => { if (!hasAudio) { audio.current?.pause(); setPreview(null); } }, [hasAudio]);
-  async function action(run: () => Promise<unknown>, queued = false, savedField?: "title" | "names") {
+  async function action(run: () => Promise<unknown>, queued = false, savedField?: "title" | "names" | "speakers") {
     if (busy) return;
     setBusy(true); setError(""); setNotice("");
     try {
       await run();
-      if (queued) { setMeeting(current => current ? { ...current, status: "queued", progress: 0 } : current); setEditing(false); setRefreshVersion(value => value + 1); }
+      if (queued) { setProtocolStale(false); setMeeting(current => current ? { ...current, status: "queued", progress: 0 } : current); setEditing(false); setRefreshVersion(value => value + 1); }
       else {
         const next = await api.getMeeting(id); setMeeting(next);
         if (savedField === "names") setNames(next.speakerNames);
         if (savedField === "title") setTitle(next.title);
+        if ((savedField === "speakers" || savedField === "names") && next.status === "done") { setProtocolStale(true); setEditing(true); }
         serverTitle.current = next.title; serverNames.current = next.speakerNames;
       }
       callbacks.current.onChanged?.();
@@ -93,6 +98,8 @@ export function MeetingDetail({ id, ownSpeakerName, initial, onChanged, onDelete
   }
   const transcript = meeting ? meetingTranscript(meeting, names) : "";
   const speakers = meeting ? [...new Map(meeting.segments.map(segment => [segment.speakerId, segment])).values()] : [];
+  // Orphaned saved names remain in storage but must not be sent as unknown active speakers.
+  const activeNames = nonEmptyNames(Object.fromEntries(speakers.map(speaker => [speaker.speakerId, names[speaker.speakerId] ?? ""])));
   const naming = meeting?.status === "naming" || (meeting?.status === "done" && editing);
   return <div className="stack meeting-detail">
     {error && <p className="form-error" role="alert">{error}</p>}
@@ -116,51 +123,62 @@ export function MeetingDetail({ id, ownSpeakerName, initial, onChanged, onDelete
         <p className="field-hint">Gleiche Namen führen Sprecher zusammen. Die Zuordnung erscheint sofort im Transkript.</p>
         <datalist id={`names-${id}`}>{[...new Set([...(meeting.participants ?? []), ownSpeakerName ?? ""].filter(Boolean))].map(name => <option key={name} value={name} />)}</datalist>
         {speakers.map(speaker => {
-          const quotes = meeting.segments.filter(segment => segment.speakerId === speaker.speakerId && segment.text.trim()).slice(0, 12)
-            .sort((a, b) => b.text.length - a.text.length).slice(0, 3).sort((a, b) => a.start - b.start);
+          const quotes = speakerQuotes(meeting, speaker.speakerId);
           const label = meeting.parts.length > 1 && !speaker.speakerLabel.startsWith("Teil ") ? `Teil ${speaker.part} · ${speaker.speakerLabel}` : speaker.speakerLabel;
           return <section className="stack speaker-row" key={speaker.speakerId}>
             <Field label={label} htmlFor={`speaker-${speaker.speakerId}`}>
               <Input id={`speaker-${speaker.speakerId}`} list={`names-${id}`} maxLength={100} value={names[speaker.speakerId] ?? ""} placeholder="Name (optional)" disabled={busy}
                 onChange={event => setNames({ ...names, [speaker.speakerId]: event.target.value })} />
             </Field>
-            {quotes.map((quote, index) => <blockquote key={index}>{quote.text.trim().slice(0, 180)}{quote.text.trim().length > 180 ? " …" : ""}</blockquote>)}
-            {hasAudio && quotes.length > 0 && <div><Button variant="outline" size="sm" onClick={() => play(speaker.part, quotes[0].start)}><Play aria-hidden />{label} anhören</Button></div>}
+            {quotes.map((quote, index) => <div className="stack" key={index}>
+              <blockquote>{quote.text.trim().slice(0, 180)}{quote.text.trim().length > 180 ? " …" : ""}</blockquote>
+              {hasAudio && <div><Button variant="outline" size="sm" aria-label={`${label}, Zitat ${index + 1} anhören`} onClick={() => play(quote.part, quote.start)}><Play aria-hidden />Zitat {index + 1} anhören</Button></div>}
+            </div>)}
           </section>;
         })}
+        <p className="field-hint">Stecken zwei Personen in einem Sprecher? Im Transkript Absätze einem neuen Sprecher zuweisen.</p>
         {hasAudio && preview && <audio ref={audio} key={preview.part} src={audioUrl(id, preview.part)} controls preload="metadata" onLoadedMetadata={() => {
           if (audio.current) { audio.current.currentTime = preview.start; void audio.current.play().catch(() => setError("Audio konnte nicht abgespielt werden.")); }
         }} />}
-        <div className="row wrap">
+        <div className="row wrap protocol-actions">
+          <Field label="Protokollsprache" htmlFor={`protocol-language-${id}`}><Select id={`protocol-language-${id}`} value={protocolLanguage} disabled={busy} onChange={event => {
+            setProtocolLanguage(event.target.value); saveProtocolLanguage(event.target.value);
+          }}>{protocolLanguages.map(language => <option key={language.id} value={language.id}>{language.label}</option>)}</Select></Field>
           {meeting.status === "done" ? <>
-            <Button disabled={busy} onClick={() => void action(() => api.patchMeeting(id, { speakerNames: nonEmptyNames(names) }), false, "names")}>Namen speichern</Button>
-            <Button variant="outline" disabled={busy} onClick={() => void action(() => api.protocolMeeting(id, nonEmptyNames(names)), true)}>Protokoll neu erzeugen</Button>
+            <Button disabled={busy} onClick={() => void action(() => api.patchMeeting(id, { speakerNames: activeNames }), false, "names")}>Namen speichern</Button>
+            <Button variant="outline" disabled={busy} onClick={() => void action(() => api.protocolMeeting(id, activeNames, protocolLanguage), true)}>Protokoll neu erzeugen</Button>
             <Button variant="ghost" onClick={() => { setEditing(false); setNames(meeting.speakerNames); }}>Schließen</Button>
           </> : <>
-            <Button disabled={busy} onClick={() => void action(() => api.protocolMeeting(id, nonEmptyNames(names)), true)}>Protokoll erstellen</Button>
-            <Button variant="outline" disabled={busy} onClick={() => void action(() => api.protocolMeeting(id), true)}>Ohne Namen erstellen</Button>
+            <Button disabled={busy} onClick={() => void action(() => api.protocolMeeting(id, activeNames, protocolLanguage), true)}>Protokoll erstellen</Button>
+            <Button variant="outline" disabled={busy} onClick={() => void action(() => api.protocolMeeting(id, undefined, protocolLanguage), true)}>Ohne Namen erstellen</Button>
           </>}
         </div>
       </CardContent></Card>}
+      {protocolStale && <p role="status" className="field-hint">Protokoll neu erzeugen, damit die Zuordnung wirkt</p>}
       {meeting.status === "done" && <Card><CardHeader><CardTitle>Protokoll</CardTitle></CardHeader><CardContent>
-        <div className="row wrap"><Button variant="outline" onClick={() => void copy(meeting.protocol)}>Protokoll kopieren</Button><Button variant="outline" onClick={() => downloadFile(`${meeting.title || "Sitzung"}.md`, meeting.protocol, "text/markdown;charset=utf-8")}>Markdown herunterladen</Button>
+        <p className="field-hint">{meeting.protocolProvider || "Anbieter unbekannt"}{meeting.protocolModel ? ` / ${meeting.protocolModel}` : ""} · Protokollsprache: {protocolLanguageName(meeting.protocolLanguage || meeting.language)}</p>
+        <div className="row wrap"><Button variant="outline" onClick={() => void copy(meeting.protocol)}>Protokoll kopieren</Button><Button variant="outline" onClick={() => downloadFile(meetingFileName(meeting, "protocol"), meeting.protocol, "text/markdown;charset=utf-8")}>Markdown herunterladen</Button>
           {!editing && <Button variant="ghost" onClick={() => setEditing(true)}>Sprecher umbenennen</Button>}</div>
         <Markdown text={meeting.protocol} />
       </CardContent></Card>}
       {!!meeting.segments.length && <Card><CardHeader><CardTitle>Transkript</CardTitle></CardHeader><CardContent>
-        <div className="row wrap"><Button variant="outline" onClick={() => void copy(transcript)}>Transkript kopieren</Button><Button variant="outline" onClick={() => downloadFile(`${meeting.title || "Sitzung"}.txt`, transcript, "text/plain;charset=utf-8")}>TXT herunterladen</Button></div>
-        <div className="meeting-transcript">{transcript.split("\n\n").map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
+        <div className="row wrap"><Button variant="outline" onClick={() => void copy(transcript)}>Transkript kopieren</Button><Button variant="outline" onClick={() => downloadFile(meetingFileName(meeting, "transcript"), transcript, "text/plain;charset=utf-8")}>TXT herunterladen</Button></div>
+        {(meeting.status === "naming" || meeting.status === "done") && <div><Button variant="ghost" disabled={busy} onClick={() => setConfirm("speakers")}>Zuordnung zurücksetzen</Button></div>}
+        <MeetingTranscript meeting={meeting} names={names} disabled={busy} onAssign={(indices, speakerId) => {
+          void action(() => api.patchMeeting(id, { segmentSpeakers: Object.fromEntries(indices.map(index => [String(index), speakerId])) }), false, "speakers");
+        }} />
       </CardContent></Card>}
       {hasAudio && !isMeetingProcessing(meeting.status) && <Card><CardHeader><CardTitle>Audio</CardTitle></CardHeader><CardContent>
         {meeting.parts.map(part => <a key={part.part} href={audioUrl(id, part.part)} download>Teil {part.part}: Audio herunterladen{meeting.audioExpiresAt ? ` (wird am ${meetingDate(meeting.audioExpiresAt)} gelöscht)` : ""}</a>)}
         <div><Button variant="outline" disabled={busy} onClick={() => setConfirm("audio")}>Jetzt löschen</Button></div>
       </CardContent></Card>}
       <div><Button variant="destructive" disabled={busy || isMeetingProcessing(meeting.status)} onClick={() => setConfirm("meeting")}>Sitzung löschen</Button></div>
-      {confirm && <ConfirmDialog title={confirm === "audio" ? "Audio jetzt löschen?" : "Sitzung löschen?"} confirmLabel="Löschen" onClose={() => setConfirm(null)} onConfirm={() => {
+      {confirm && <ConfirmDialog title={confirm === "speakers" ? "Zuordnung zurücksetzen?" : confirm === "audio" ? "Audio jetzt löschen?" : "Sitzung löschen?"} confirmLabel={confirm === "speakers" ? "Zurücksetzen" : "Löschen"} onClose={() => setConfirm(null)} onConfirm={() => {
         const target = confirm; setConfirm(null);
-        if (target === "audio") void action(() => api.deleteMeetingAudio(id));
+        if (target === "speakers") void action(() => api.patchMeeting(id, { resetSpeakers: true }), false, "speakers");
+        else if (target === "audio") void action(() => api.deleteMeetingAudio(id));
         else { setBusy(true); void api.deleteMeeting(id).then(() => { callbacks.current.onDeleted?.(); callbacks.current.onChanged?.(); }).catch(reason => setError(reason.message)).finally(() => setBusy(false)); }
-      }}>{confirm === "audio" ? "Alle Audioteile werden dauerhaft gelöscht. Transkript und Protokoll bleiben erhalten." : "Die Sitzung mit Audio, Transkript und Protokoll wird dauerhaft gelöscht."}</ConfirmDialog>}
+      }}>{confirm === "speakers" ? "Die Sprecherzuordnung wird auf die Erkennung des Anbieters zurückgesetzt. Das vorhandene Protokoll wird dabei nicht neu erzeugt." : confirm === "audio" ? "Alle Audioteile werden dauerhaft gelöscht. Transkript und Protokoll bleiben erhalten." : "Die Sitzung mit Audio, Transkript und Protokoll wird dauerhaft gelöscht."}</ConfirmDialog>}
     </>}
   </div>;
 }
