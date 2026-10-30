@@ -32,13 +32,13 @@ function matches(provider: ProviderId, task: ModelTask, model: ModelRecord): boo
   const id = model.id;
   if (provider === "anthropic") return task === "chat" && id.startsWith("claude-");
   if (provider === "openai") {
-    if (task === "stt") return id === "whisper-1" || /^gpt-.*-transcribe(?:-|$)/.test(id) && !/diarize/.test(id);
+    if (task === "stt") return id === "whisper-1" || /^gpt-(?:.*-)?transcribe(?:-|$)/.test(id) && !/diarize/.test(id) && !/(?:^|-)(?:live|realtime)(?:-|$)/.test(id);
     // Responses supports these text families without temperature or chat-only parameters.
     return task === "chat" && /^(gpt-(4o|4\.1|5)(?:[.-]|$)|o[134](?:-|$))/.test(id) && !/audio|realtime|tts|image|search|embedding|transcribe|moderation|instruct|codex/.test(id);
   }
   if (provider === "mistral") {
-    if (task === "meetings") return /-transcribe-/.test(id) && !/realtime/.test(id);
-    if (task === "stt") return /^voxtral-/.test(id) && !/realtime/.test(id) && (/-transcribe(?:-|$)/.test(id) || id === "voxtral-mini-latest" || model.capabilities?.audio_transcription === true);
+    if (task === "meetings") return /-transcribe-/.test(id) && !/realtime/.test(id) && !/(?:^|-)live(?:-|$)/.test(id);
+    if (task === "stt") return /^voxtral-/.test(id) && !/realtime/.test(id) && !/(?:^|-)live(?:-|$)/.test(id) && (/-transcribe(?:-|$)/.test(id) || id === "voxtral-mini-latest" || model.capabilities?.audio_transcription === true);
     return !model.capabilities?.audio && !model.capabilities?.audio_transcription && !model.capabilities?.audio_speech && !model.capabilities?.audio_transcription_realtime && !/embed|ocr|moderat|audio|voxtral|transcri/.test(id) && (model.capabilities?.completion_chat === true || model.capabilities?.completion_chat === undefined && /^(mistral-|ministral-|magistral-|codestral-|devstral-|pixtral-)/.test(id));
   }
   return false;

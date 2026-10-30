@@ -64,3 +64,21 @@ it("refreshes lists during key checks and uses curated fallback after a failed r
   await tracker.check(); expect(modelCatalog().mistral.chat.map(m => m.id)).not.toContain("mistral-new");
   expect(modelCatalog().mistral.chat).toContainEqual({ id: "mistral-large-latest", default: true });
 });
+
+it("keeps file transcription models and excludes streaming and diarization models from OpenAI STT", () => {
+  vi.stubEnv("OPENAI_API_KEY", "file-transcription-test");
+  const supported = ["gpt-transcribe", "gpt-transcribe-2026-10-30", "gpt-4o-mini-transcribe", "gpt-4o-mini-transcribe-2026-10-30", "gpt-4o-transcribe", "gpt-4o-transcribe-2026-10-30", "whisper-1"];
+  const excluded = ["gpt-live-transcribe", "gpt-realtime-transcribe", "gpt-4o-realtime-preview", "gpt-4o-transcribe-live", "gpt-4o-transcribe-realtime-2026-10-30", "gpt-4o-transcribe-diarize"];
+  updateModels("openai", { data: [...supported, ...excluded].map(id => ({ id })) });
+  expect(modelCatalog().openai.stt.map(model => model.id).sort()).toEqual([...supported].sort());
+});
+it.each(["stt", "meetings"] as const)("excludes live and realtime Mistral models from %s", task => {
+  vi.stubEnv("MISTRAL_API_KEY", "file-transcription-test");
+  vi.stubEnv("MISTRAL_MEETING_MODEL", "voxtral-mini-transcribe-3");
+  const supported = "voxtral-mini-transcribe-4";
+  const excluded = ["voxtral-live-transcribe-4", "voxtral-realtime-transcribe-4", "voxtral-mini-transcribe-live-4", "voxtral-mini-transcribe-realtime-4", "voxtral-live-4"];
+  updateModels("mistral", { data: [supported, ...excluded].map(id => ({ id, capabilities: { audio_transcription: true } })) });
+  const ids = modelCatalog().mistral[task].map(model => model.id);
+  expect(ids).toContain(supported);
+  for (const id of excluded) expect(ids).not.toContain(id);
+});
