@@ -44,6 +44,7 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
       version: 1,
       providers: { ...Object.fromEntries(Object.keys(defaultPrompts).map(mode => [mode, "mistral"])), meetings: "mistral" },
       meetingFallback: false,
+      dictationSpacePause: false,
       prompts: defaultPrompts,
       lexicon: [],
       snippets: [],
@@ -323,6 +324,7 @@ function isValidSettings(value: unknown): boolean {
   if (!isRecord(value) || typeof value.version !== "number" || !Number.isFinite(value.version)) return false;
   const { providers, prompts } = value;
   if (!isRecord(providers) || !isRecord(prompts)) return false;
+  if (value.dictationSpacePause !== undefined && typeof value.dictationSpacePause !== "boolean") return false;
   if (value.meetingFallback !== undefined && typeof value.meetingFallback !== "boolean") return false;
   const modes = Object.keys(defaultPrompts);
   return modes.every(mode => isProvider(providers[mode])) &&

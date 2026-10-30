@@ -11,6 +11,7 @@ const values = {
 } as const;
 const defaults: Settings = {
   version: 1,
+  dictationSpacePause: false,
   providers: { ...values },
   prompts: { ...values },
   lexicon: [],
@@ -78,4 +79,12 @@ describe("confirmed settings store", () => {
     await save;
     expect(store.snapshot.settings?.ownSpeakerName).toBe("Neu");
   });
+});
+
+it("defaults legacy settings to space pause off and persists the confirmed choice", async () => {
+  const api = client(), store = new SettingsStore(api);
+  await store.load(); expect(store.snapshot.settings?.dictationSpacePause).toBe(false);
+  await store.save({ ...store.snapshot.settings!, dictationSpacePause: true });
+  expect(api.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ dictationSpacePause: true }));
+  expect(store.snapshot.settings?.dictationSpacePause).toBe(true);
 });

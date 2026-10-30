@@ -62,12 +62,8 @@ function AppContent() {
   const recordingOptions = useRef<DictationOptions | null>(null);
   const [microphone] = useState(() => new MicrophoneGate());
   const meeting = useMeetingRecorder(microphone);
-  const recorder = useRecorder(text => {
-    locked.current = false;
-    microphone.release("dictation");
-    showMessage({ kind: "warning", text });
-  });
-  const { recording, elapsed, levels } = recorder;
+  const recorder = useRecorder();
+  const { recording, paused, interrupted, elapsed, levels } = recorder;
   useEffect(() => {
     if (settingsStatus !== "ready") return;
     const next = mode ? resolveMode(mode, modes) :
@@ -102,7 +98,7 @@ function AppContent() {
   }
 
   async function stopRecording() {
-    if (!recording || busyText || processing.current || !recordingOptions.current) return;
+    if ((!recording && !interrupted) || busyText || processing.current || !recordingOptions.current) return;
     processing.current = true;
     setBusyText("Transkribiere …");
     try {
@@ -199,7 +195,7 @@ function AppContent() {
           {recording || meeting.state.active || meeting.state.phase === "finishing" ? (
             <div className="live-indicator">
               <span className="live-dot" aria-hidden />
-              <span>{meeting.state.active ? meeting.state.phase === "paused" ? "Meeting pausiert" : meeting.state.phase === "interrupted" ? "Meeting unterbrochen" : "Meeting-Aufnahme" : meeting.state.phase === "finishing" ? "Meeting wird gesichert" : "Aufnahme läuft"}</span>
+              <span>{meeting.state.active ? meeting.state.phase === "paused" ? "Meeting pausiert" : meeting.state.phase === "interrupted" ? "Meeting unterbrochen" : "Meeting-Aufnahme" : meeting.state.phase === "finishing" ? "Meeting wird gesichert" : paused ? "Diktat pausiert" : "Aufnahme läuft"}</span>
             </div>
           ) : null}
         </header>
@@ -208,7 +204,7 @@ function AppContent() {
           {section === "dictation" ? (
             <DictationView lastResult={lastResult ? { text: lastResult.text, meta: resultMeta(lastResult) } : null} onCopy={copy} />
           ) : section === "protocol" ? (
-            <ProtocolView state={meeting.state} controller={meeting.controller} language={language} dictationActive={recording || !!busyText} ownSpeakerName={settings?.ownSpeakerName} />
+            <ProtocolView state={meeting.state} controller={meeting.controller} language={language} dictationActive={recording || interrupted || !!busyText} ownSpeakerName={settings?.ownSpeakerName} />
           ) : section === "meetings" ? (
             <MeetingsView language={language} />
           ) : section === "lexicon" ? (
@@ -216,7 +212,7 @@ function AppContent() {
           ) : section === "snippets" ? (
             <SnippetsView />
           ) : section === "modes" ? (
-            <ModesView modes={modes} activeMode={activeMode} onModeChange={setMode} />
+            <ModesView modes={modes} activeMode={activeMode} onModeChange={id => { if (!recording && !interrupted && !busyText) setMode(id); }} disabled={recording || interrupted || !!busyText} />
           ) : section === "history" ? (
             <HistoryView />
           ) : (
@@ -224,7 +220,7 @@ function AppContent() {
           )}
         </div>
 
-        {section !== "protocol" && section !== "settings" ? (
+        {(recording || interrupted || (section !== "protocol" && section !== "settings")) ? (
           <OverlayBar
             languages={languages}
             language={language}
@@ -235,6 +231,12 @@ function AppContent() {
             mode={activeMode}
             onModeChange={setMode}
             recording={recording}
+            paused={paused}
+            interrupted={interrupted}
+            pauseSupported={recorder.pauseSupported}
+            dictationSpacePause={settings?.dictationSpacePause ?? false}
+            onPauseToggle={() => { if (paused) recorder.resume(); else recorder.pause(); }}
+            onDiscard={() => { recorder.discard(); locked.current = false; microphone.release("dictation"); }}
             elapsedSeconds={elapsed}
             levels={levels}
             busyText={busyText}

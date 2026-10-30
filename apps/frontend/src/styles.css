@@ -938,8 +938,9 @@ textarea {
 
 .overlay-recording {
   display: flex;
-  width: 240px;
-  height: 44px;
+  width: 304px;
+  max-width: calc(100vw - 24px);
+  height: 52px;
   align-items: center;
   gap: 12px;
   padding: 0 6px 0 16px;
@@ -1311,3 +1312,24 @@ textarea {
 .transcript-segments p { margin: 0; }
 .transcript-segments .select { max-width: 320px; }
 .protocol-actions { align-items: end; }
+
+/* Pause keeps the microphone session alive, but hides the inactive input meter. */
+.overlay-paused { flex: 1; text-align: center; font-size: 13px; }
+.overlay-pause {
+  display: flex; flex-shrink: 0; align-items: center; justify-content: center;
+  width: 44px; height: 44px; border: 0; border-radius: 50%;
+  background: transparent; color: var(--capsule-fg); cursor: pointer;
+}
+.overlay-pause:hover { background: var(--capsule-bg-hover); }
+.overlay-recording .overlay-stop { width: 44px; height: 44px; }
+.overlay-time.is-paused { animation: dictation-paused 2s ease-in-out infinite; }
+@keyframes dictation-paused { 50% { opacity: .55; } }
+.overlay-recovery { width: min(340px, calc(100vw - 24px)); padding: 16px; line-height: 1.5; }
+.overlay-recovery-action {
+  min-height: 44px; padding: 8px; border: 0; border-radius: var(--radius-md);
+  background: transparent; color: inherit; text-decoration: underline; cursor: pointer;
+}
+.overlay-recovery-action:hover { background: var(--capsule-bg-hover); }
+@media (prefers-reduced-motion: reduce) {
+  .overlay-time.is-paused { animation: none; }
+}

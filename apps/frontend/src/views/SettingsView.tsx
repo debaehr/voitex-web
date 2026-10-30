@@ -25,6 +25,7 @@ import type { CustomMode, Provider, Settings } from "../lib/types";
 const entries = [
   { id: "providers", title: "Anbieter" },
   { id: "prompts", title: "Modi & Prompts" },
+  { id: "dictation", title: "Diktat" },
   { id: "appearance", title: "Darstellung" },
 ];
 const nonDictationModes = [
@@ -162,7 +163,12 @@ export function SettingsView({
           className="form-fields stack"
           disabled={status !== "ready" || saving}
         >
-          {activeId === "prompts" ? (
+          {activeId === "dictation" ? (
+            <SettingRow title="Leertaste pausiert und setzt das Diktat fort"
+              description="Gilt, wenn der Fokus auf der Diktatleiste liegt."
+              control={<Switch label="Leertaste pausiert und setzt das Diktat fort" checked={draft.dictationSpacePause ?? false}
+                onCheckedChange={checked => update({ ...draft, dictationSpacePause: checked })} />} />
+          ) : activeId === "prompts" ? (
             <>
               <div className="stack">
                 <div><Button variant="outline" disabled={(draft.customModes?.length ?? 0) >= 20}

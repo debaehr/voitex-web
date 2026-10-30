@@ -1,6 +1,6 @@
 import { targetLanguages, type TargetLanguage } from "../lib/target-languages";
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Check, CheckCircle2, ChevronDown } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, ChevronDown, Pause, Play } from "lucide-react";
 
 // Floating capsule bar at the bottom of the main area, modelled on voitex'
 // overlay.html: mode above record, source left and target right; while recording a
@@ -27,6 +27,12 @@ interface OverlayBarProps {
   mode: string;
   onModeChange: (id: string) => void;
   recording: boolean;
+  paused?: boolean;
+  interrupted?: boolean;
+  pauseSupported?: boolean;
+  dictationSpacePause?: boolean;
+  onPauseToggle?: () => void;
+  onDiscard?: () => void;
   elapsedSeconds: number;
   /** Normalised input levels 0..1, newest last; empty while no signal arrives. */
   levels: number[];
@@ -68,9 +74,15 @@ export function OverlayBar(props: OverlayBarProps) {
   const menuValue = menu === "language" ? props.language : menu === "target" ? props.targetLanguage : props.mode;
 
   return (
-    <div className="overlay" ref={rootRef}>
+    <div className="overlay" ref={rootRef} role="group" tabIndex={0} aria-label="Diktataufnahme" onKeyDown={event => {
+      // Handle Space here so typing elsewhere never controls the microphone.
+      if (event.key !== " " || event.repeat || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey ||
+        !event.currentTarget.contains(event.target as Node) || !props.dictationSpacePause ||
+        !props.recording || !props.pauseSupported || props.busyText) return;
+      event.preventDefault(); props.onPauseToggle?.();
+    }}>
       {props.lockText ? <div id="dictation-lock" className="capsule overlay-text" role="status">{props.lockText}</div> : null}
-      {menu && !props.recording && !props.busyText ? (
+      {menu && !props.recording && !props.interrupted && !props.busyText ? (
         <div className="capsule overlay-menu" role="menu" aria-label={menu === "language" ? "Aufnahmesprache" : menu === "target" ? "Zielsprache" : "Modus"}>
           {menuOptions.map((option) => (
             <button
@@ -93,7 +105,7 @@ export function OverlayBar(props: OverlayBarProps) {
         </div>
       ) : null}
 
-      {props.message && !props.recording && !props.busyText ? (
+      {props.message && !props.recording && !props.interrupted && !props.busyText ? (
         <div className="capsule overlay-text" role="status">
           {props.message.kind === "warning" ? <AlertTriangle className="warn" /> : null}
           {props.message.kind === "success" ? <CheckCircle2 className="ok" /> : null}
@@ -105,10 +117,22 @@ export function OverlayBar(props: OverlayBarProps) {
         <div className="capsule overlay-text" role="status" aria-live="polite">
           {props.busyText}
         </div>
+      ) : props.interrupted ? (
+        <div className="capsule overlay-recovery" role="alert">
+          <span>Aufnahme wurde unterbrochen — bisherige Aufnahme verarbeiten / verwerfen</span>
+          <div className="row wrap">
+            <button type="button" className="overlay-recovery-action" onClick={props.onStop}>Bisherige Aufnahme verarbeiten</button>
+            <button type="button" className="overlay-recovery-action" onClick={props.onDiscard}>Verwerfen</button>
+          </div>
+        </div>
       ) : props.recording ? (
         <div className="capsule overlay-recording">
-          <span className="overlay-time">{formatClock(props.elapsedSeconds)}</span>
-          <Wave levels={props.levels} />
+          <span className={`overlay-time${props.paused ? " is-paused" : ""}`}>{formatClock(props.elapsedSeconds)}</span>
+          {props.paused ? <span className="overlay-paused" role="status">Pausiert</span> : <Wave levels={props.levels} />}
+          {props.pauseSupported ? <button type="button" className="overlay-pause"
+            aria-label={props.paused ? "Diktat fortsetzen" : "Diktat pausieren"} onClick={props.onPauseToggle}>
+            {props.paused ? <Play size={18} aria-hidden /> : <Pause size={18} aria-hidden />}
+          </button> : null}
           <button type="button" className="overlay-stop" aria-label="Aufnahme beenden" onClick={props.onStop}>
             <span />
           </button>

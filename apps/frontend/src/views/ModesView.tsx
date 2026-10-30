@@ -9,10 +9,11 @@ export interface ModeInfo {
 interface ModesViewProps {
   modes: ModeInfo[];
   activeMode: string;
+  disabled?: boolean;
   onModeChange: (id: string) => void;
 }
 
-export function ModesView({ modes, activeMode, onModeChange }: ModesViewProps) {
+export function ModesView({ modes, activeMode, onModeChange, disabled }: ModesViewProps) {
   return (
     <div className="page-column stack">
       <Card className="modes-list">
@@ -24,6 +25,7 @@ export function ModesView({ modes, activeMode, onModeChange }: ModesViewProps) {
             <button
               key={mode.id}
               type="button"
+              disabled={disabled}
               className="list-row"
               aria-pressed={mode.id === activeMode}
               onClick={() => onModeChange(mode.id)}

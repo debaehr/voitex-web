@@ -62,3 +62,19 @@ it("loads dictation context from server-side lexicon, with no change for an empt
   await call("transcribe"); const terms = (upstream[1].init!.body as FormData).getAll("context_bias");
   expect(terms).toHaveLength(100); expect(terms.slice(0, 2)).toEqual(["Voitex", "Anna"]);
 });
+
+it("defaults space pause off and validates both booleans and legacy settings", async () => {
+  const defaults = await (await fetch(base + "/settings/defaults")).json();
+  expect(defaults.dictationSpacePause).toBe(false);
+  for (const value of [false, true, "true", 1, null]) {
+    const response = await fetch(base + "/settings", { method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...defaults, dictationSpacePause: value }) });
+    expect(response.status).toBe(typeof value === "boolean" ? 200 : 400);
+    if (typeof value === "boolean") expect((await (await fetch(base + "/settings")).json()).dictationSpacePause).toBe(value);
+  }
+  delete defaults.dictationSpacePause;
+  await writeFile(join(dir, "settings.json"), JSON.stringify(defaults));
+  const legacy = await (await fetch(base + "/settings")).json();
+  expect(legacy.dictationSpacePause ?? false).toBe(false);
+  expect(await (await fetch(base + "/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(legacy) })).json()).toEqual({ ok: true });
+});

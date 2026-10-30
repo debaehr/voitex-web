@@ -31,6 +31,7 @@ export interface Settings {
   version: 1;
   providers: Record<SettingMode, Provider> & { meetings?: "mistral" | "assemblyai" };
   meetingFallback?: boolean;
+  dictationSpacePause?: boolean;
   prompts: Record<SettingMode, string>;
   lexicon: LexiconEntry[];
   snippets: Snippet[];
