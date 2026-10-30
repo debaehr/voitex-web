@@ -1,6 +1,6 @@
 # SESSION STATE — voitex-web
 
-> **Letztes Update:** 301026_1230 · **von:** Claude Opus 5.5
+> **Letztes Update:** 301026_1300 · **von:** Claude Opus 5.5
 > **Branch:** main · **Node:** tool-01
 
 <!--
@@ -24,6 +24,7 @@ Dazu F-014 Mistral als Standard (Datenschutz) und F-006 v3 (Sprecher zuordnen vo
 Protokoll), beide freigegeben 27.10. Lauf 1, 1b, 2 (Frontend Aufnahme) und 2b (Backend F-014 + v3) fertig und live;
 Lauf 3 (Frontend Ergebnis, Sprecher zuordnen, Upload, Einstellungen) fertig und live;
 Lauf 9d (30.10.): Echtzeit-Modelle (`live`/`realtime`) aus STT-Listen gefiltert, `gpt-transcribe` jetzt sichtbar; live;
+Abnahme Mensch 30.10.: Karte „Anbieter und Modelle“, Verbindung prüfen, Menü einklappbar bestanden. Übrige Abnahmen offen;
 Lauf 3b (Icon, Anbieter-Listen, Markdown) fertig und live; Abnahme (Lauf 4) läuft. Neu freigegeben: Systemton mit aufnehmen
 (`specs/changes/2026-10-27-systemton.md`), Lauf 5 fertig und live;
 Abnahme A3 (Teams-Desktop mit Jabra, Tab-Audio, Freigabe neu, minimiert) offen.
