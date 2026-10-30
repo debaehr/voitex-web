@@ -15,7 +15,7 @@ const baseUrl = "https://api.assemblyai.com";
 export async function transcribeMeeting(filePath: string, options: MeetingTranscriptionOptions): Promise<MeetingTranscription> {
   const apiKey = process.env.ASSEMBLYAI_API_KEY;
   if (!apiKey?.trim()) throw new Error("AssemblyAI is not configured.");
-  const model = process.env.ASSEMBLYAI_MEETING_MODEL?.trim() || "universal-3-5-pro";
+  const model = options.model ?? (process.env.ASSEMBLYAI_MEETING_MODEL?.trim() || "universal-3-5-pro");
   const uploadUrl = await uploadAudio(apiKey, await readFile(filePath), options.contentType);
   const transcriptId = await createTranscript(apiKey, uploadUrl, model, options);
   const transcript = await pollTranscript(apiKey, transcriptId);

@@ -1,4 +1,4 @@
-import { ProviderOptions } from "../components/ProviderOptions";
+import { ProviderModelsCard } from "../components/ProviderModelsCard";
 import { useEffect, useState } from "react";
 import { TwoLevel } from "../components/TwoLevel";
 import { ConfirmDialog } from "../components/Dialog";
@@ -7,7 +7,6 @@ import {
   Button,
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
   Field,
@@ -20,10 +19,10 @@ import {
 import type { ThemePreference } from "../lib/theme";
 import { SettingsNotice, useSettings } from "../lib/settings-context";
 import { isDirty } from "../lib/settings";
-import { dictationSttProvider, addCustomMode, availableDictationModes, customModeErrors, deleteMode, hasModeErrors, restoreBuiltinModes, updateCustomMode } from "../lib/modes";
-import type { CustomMode, Provider, Settings } from "../lib/types";
+import { addCustomMode, availableDictationModes, customModeErrors, deleteMode, hasModeErrors, restoreBuiltinModes, updateCustomMode } from "../lib/modes";
+import type { CustomMode, Settings } from "../lib/types";
 const entries = [
-  { id: "providers", title: "Anbieter" },
+  { id: "providers", title: "Anbieter und Modelle" },
   { id: "prompts", title: "Modi & Prompts" },
   { id: "dictation", title: "Diktat" },
   { id: "appearance", title: "Darstellung" },
@@ -86,12 +85,6 @@ export function SettingsView({
           : "Speichern fehlgeschlagen. Bitte erneut versuchen.",
       );
     }
-  }
-  function changeProvider(id: string, provider: Provider) {
-    if (!draft) return;
-    update(draft.customModes?.some(mode => mode.id === id)
-      ? updateCustomMode(draft, id, { provider })
-      : { ...draft, providers: { ...draft.providers, [id]: provider } });
   }
   function deleteButton(id: string, label: string) {
     return <Button variant="outline" size="sm" disabled={lastMode}
@@ -181,7 +174,7 @@ export function SettingsView({
                 {lastMode && <p id="last-mode-hint" className="field-hint">Der letzte verfügbare Modus kann nicht gelöscht werden.</p>}
               </div>
               <p className="muted">
-                Prompt je Modus. Der Anbieter wird unter „Anbieter“ gewählt.
+                Prompt je Modus. Der Anbieter wird unter „Anbieter und Modelle“ gewählt.
               </p>
               {available.map((mode) => mode.builtin ? (
                 <Card key={mode.id} className="mode-card">
@@ -246,49 +239,7 @@ export function SettingsView({
               </Card>)}
             </>
           ) : (
-            <>
-              <p className="muted">
-                Anbieter für Transkription und Umschreiben, je Modus und für Meetings.
-              </p>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Anbieter je Modus</CardTitle>
-                  <CardDescription>
-                    Die API-Schlüssel liegen auf dem Server, nicht im Browser.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Field label="Meetings" htmlFor="provider-meetings">
-                    <Select id="provider-meetings" value={draft.providers.meetings ?? "mistral"}
-                      onChange={event => update({ ...draft, providers: { ...draft.providers, meetings: event.target.value as "mistral" | "assemblyai" } })}>
-                      <ProviderOptions available={providers?.meetings ?? []} invalid={providers?.invalid} selected={draft.providers.meetings ?? "mistral"} />
-                    </Select>
-                  </Field>
-                  <SettingRow title="Bei Fehler auf AssemblyAI ausweichen" description="Audio geht dann an einen US-Anbieter."
-                    control={<Switch label="Bei Fehler auf AssemblyAI ausweichen" checked={draft.meetingFallback ?? false}
-                      onCheckedChange={checked => update({ ...draft, meetingFallback: checked })} />} />
-                  {[...available, ...nonDictationModes.map(mode => ({ ...mode, provider: draft.providers[mode.id] }))].map((mode) => (
-                    <Field
-                      key={mode.id}
-                      label={mode.label || "Neuer Modus"}
-                      hint={mode.provider === "anthropic" && available.some(item => item.id === mode.id)
-                        ? `Spracherkennung über ${dictationSttProvider(mode.provider, providers?.stt) === "mistral" ? "Mistral" : "OpenAI"}` : undefined}
-                      htmlFor={`provider-${mode.id}`}
-                    >
-                      <Select
-                        id={`provider-${mode.id}`}
-                        value={mode.provider}
-                        onChange={(event) =>
-                          changeProvider(mode.id, event.target.value as Provider)
-                        }
-                      >
-                        <ProviderOptions available={providers?.llm ?? []} invalid={providers?.invalid} selected={mode.provider} />
-                      </Select>
-                    </Field>
-                  ))}
-                </CardContent>
-              </Card>
-            </>
+            <ProviderModelsCard settings={draft} providers={providers ?? undefined} onChange={update} />
           )}
         </fieldset>
       ) : (

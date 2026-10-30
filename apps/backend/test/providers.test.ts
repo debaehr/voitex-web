@@ -26,11 +26,11 @@ for (const [name, provider] of Object.entries({ openai, mistral, groq })) {
 
 it("passes prompt to the OpenAI SDK transcription request", async () => {
   vi.stubEnv("OPENAI_API_KEY", "test-key");
-  await openai.transcribeAudio({ buffer: Buffer.from("audio"), filename: "test.webm", mimetype: "audio/webm", prompt: "Voitex" });
-  expect(create).toHaveBeenCalledWith(expect.objectContaining({ prompt: "Voitex" }));
+  await openai.transcribeAudio({ buffer: Buffer.from("audio"), filename: "test.webm", mimetype: "audio/webm", prompt: "Marcus Hinzen, Voitex" });
+  expect(create).toHaveBeenCalledWith(expect.objectContaining({ prompt: "Marcus Hinzen, Voitex" }));
 });
 
-it.each([{ contextBias: [] }, { contextBias: [" Voitex ", "voitex", "", "Anna", ...Array.from({ length: 110 }, (_, n) => `Term${n}`)] }])("sends repeated bounded context_bias fields for Mistral dictation", async ({ contextBias }) => {
+it.each([{ contextBias: [] }, { contextBias: [" Voitex ", "voitex", "", "Anna Marcus,Hinzen", "marcus\tHINZEN", ...Array.from({ length: 110 }, (_, n) => `Term${n}`)] }])("sends repeated bounded context_bias fields for Mistral dictation", async ({ contextBias }) => {
   vi.stubEnv("MISTRAL_API_KEY", "test-key");
   const request = vi.fn(async () => new Response(JSON.stringify({ text: "transcript" })));
   vi.stubGlobal("fetch", request);
@@ -38,7 +38,8 @@ it.each([{ contextBias: [] }, { contextBias: [" Voitex ", "voitex", "", "Anna", 
   const form = (request.mock.calls[0] as unknown as [string, { body: FormData }])[1].body;
   expect(form.get("model")).toBe("voxtral-mini-latest");
   expect(form.getAll("context_bias")).toHaveLength(contextBias.length ? 100 : 0);
-  if (contextBias.length) expect(form.getAll("context_bias").slice(0, 2)).toEqual(["Voitex", "Anna"]);
+  if (contextBias.length) expect(form.getAll("context_bias").slice(0, 4)).toEqual(["Voitex", "Anna", "Marcus", "Hinzen"]);
+  expect(form.getAll("context_bias").every(term => typeof term === "string" && !/[\s,]/.test(term))).toBe(true);
 });
 
 for (const [name, provider] of Object.entries({ openai, mistral, groq })) {

@@ -1,3 +1,4 @@
+import { defaultModel } from "./models.js";
 import { httpProviderError, ProviderDiagnosticError, safeDiagnostic } from "./meeting-diagnostics.js";
 import { meetingRequest } from "./meeting-http.js";
 import { readFile } from "node:fs/promises";
@@ -23,6 +24,8 @@ export type MeetingTranscriptionOptions = {
   durationSeconds?: number;
   provider?: MeetingProvider;
   meetingFallback?: boolean;
+  model?: string;
+  fallback?: { provider: MeetingProvider; model: string } | null;
   contentType?: string;
 };
 export function isMeetingProvider(value: unknown): value is MeetingProvider {
@@ -35,9 +38,12 @@ export function availableMeetingProviders(): MeetingProvider[] {
 export async function transcribeMeeting(filePath: string, options: MeetingTranscriptionOptions = {}): Promise<MeetingTranscription> {
   const preferred = options.provider ?? "mistral";
   const order: MeetingProvider[] = [preferred];
-  if (options.meetingFallback === true) order.push(preferred === "mistral" ? "assemblyai" : "mistral");
+  const fallback = options.fallback !== undefined ? options.fallback : options.meetingFallback === true
+    ? { provider: preferred === "mistral" ? "assemblyai" as const : "mistral" as const, model: defaultModel(preferred === "mistral" ? "assemblyai" : "mistral", "meetings") } : null;
+  if (fallback && (fallback.provider !== preferred || fallback.model !== (options.model ?? defaultModel(preferred, "meetings")))) order.push(fallback.provider);
   const attempts: ProviderAttempt[] = [];
-  for (const provider of order) {
+  for (const [index, provider] of order.entries()) {
+    const attemptOptions = { ...options, model: index === 0 ? options.model : fallback?.model };
     // Voxtral accepts at most three hours per request, including as a fallback.
     if (provider === "mistral" && (options.durationSeconds ?? 0) > 3 * 60 * 60) {
       attempts.push({ provider, ok: false, reason: "Mistral: duration exceeds 3 hours" +
@@ -47,7 +53,7 @@ export async function transcribeMeeting(filePath: string, options: MeetingTransc
       attempts.push({ provider, ok: false, reason: `${provider === "mistral" ? "Mistral" : "AssemblyAI"}: no API key configured` }); continue;
     }
     try {
-      const result = provider === "mistral" ? await transcribeMistral(filePath, options) : await transcribeAssemblyAI(filePath, options);
+      const result = provider === "mistral" ? await transcribeMistral(filePath, attemptOptions) : await transcribeAssemblyAI(filePath, attemptOptions);
       if (!result.segments.length || !result.segments.every(segment =>
         typeof segment.speaker === "string" && typeof segment.text === "string" &&
         Number.isFinite(segment.start) && Number.isFinite(segment.end) && segment.start >= 0 && segment.end >= segment.start)) {
@@ -66,7 +72,8 @@ export async function transcribeMeeting(filePath: string, options: MeetingTransc
 }
 
 async function transcribeMistral(filePath: string, options: MeetingTranscriptionOptions): Promise<MeetingTranscription> {
-  const model = process.env.MISTRAL_MEETING_MODEL?.trim() || "voxtral-mini-transcribe-3";
+  const model = options.model ?? defaultModel("mistral", "meetings");
+  if (!/-transcribe-/.test(model)) throw new ProviderDiagnosticError("Mistral: meeting model must support diarization");
   const form = new FormData();
   form.append("file", new Blob([await readFile(filePath)], { type: options.contentType || "application/octet-stream" }), basename(filePath));
   form.append("model", model);

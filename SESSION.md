@@ -1,6 +1,6 @@
 # SESSION STATE — voitex-web
 
-> **Letztes Update:** 301026_1540 · **von:** Claude Opus 5.5
+> **Letztes Update:** 301026_1545 · **von:** Claude Opus 5.5
 > **Branch:** main · **Node:** tool-01
 
 <!--
@@ -31,7 +31,8 @@ Protokollsprache, MoM-Dateinamen, Audio 7 Tage), Lauf 6 fertig und live; Abnahme
 Freigegeben 30.10.: `specs/changes/2026-10-30-diktat-pause.md` (Pause im Diktat, Leertaste als Einstellung), Lauf 7 fertig und live; Abnahme A3 offen.
 Freigegeben 30.10.: `specs/changes/2026-10-30-meeting-pause.md` (Leertaste + Pausenanzeige Meetings), Lauf 8 fertig und live; Abnahme A3 offen. Lauf 8b (Select-Farben dunkel) live.
 Freigegeben 30.10.: `specs/changes/2026-10-30-modelle-verbindungstest.md` (Anbieter+Modelle, Diktat-Ausweiche,
-Verbindungstest, einklappbares Menü), Lauf 9 an Codex (xhigh). Fix 30.10.: Lexikon-Begriffe mit Leerzeichen brachen Mistral-Diktate (Context-Bias), behoben.
+Verbindungstest, einklappbares Menü), Lauf 9 + 9b (Zeitlimits je Aufgabe) live; A4-Mensch offen.
+Bekanntes Risiko: Node-fetch-Header-Timeout 5 min bei nicht gestreamten Protokoll-Aufrufen (bestand schon vorher). Fix 30.10.: Lexikon-Begriffe mit Leerzeichen brachen Mistral-Diktate (Context-Bias), behoben.
 
 ---
 

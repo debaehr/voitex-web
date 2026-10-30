@@ -1,5 +1,5 @@
 import type { ProcessingRequest, TranscriptionRequest, TranslationRequest } from "./dictation";
-import type { HistoryEntry, Providers, Settings } from "./types";
+import type { HistoryEntry, ModelSelection, ProviderCheckResult, Providers, Settings } from "./types";
 import type { FinishMeeting, MeetingChunk, MeetingDetailData, MeetingSummary, MeetingProvider } from "./meeting-types";
 export class ApiError extends Error {
   constructor(message: string, public status: number) { super(message); }
@@ -75,13 +75,16 @@ export const api = {
     form.append("provider", input.provider);
     form.append("mode", input.mode);
     form.append("language", input.language);
+    if (input.model) form.append("model", input.model);
+    if (input.fallback !== undefined) form.append("fallback", JSON.stringify(input.fallback));
     if (input.prompt) form.append("prompt", input.prompt);
-    return request<{ transcript: string; provider: string }>("/transcribe", { method: "POST", body: form });
+    return request<{ transcript: string; provider: string; model: string | null }>("/transcribe", { method: "POST", body: form });
   },
   process: (input: ProcessingRequest) =>
     request<{ processed: string; provider: string; model: string | null }>("/process", json("POST", input)),
   translate: (input: TranslationRequest) =>
     request<{ translated: string; provider: string; model: string | null }>("/translate", json("POST", input)),
+  checkProviders: (checks: ModelSelection[]) => request<{ results: ProviderCheckResult[] }>("/providers/check", json("POST", { checks })),
   getProviders: () => request<Providers>("/providers"),
   getDefaults: () => request<Settings>("/settings/defaults"),
   getSettings: () => request<Partial<Settings>>("/settings"),

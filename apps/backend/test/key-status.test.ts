@@ -58,7 +58,7 @@ it.each(["json", "multipart"])("marks real %s HTTP rejection immediately and cle
   vi.stubEnv("GROQ_API_KEY", "dummy");
   const fetch = vi.fn().mockResolvedValueOnce(new Response("rejected", { status: 401 })).mockResolvedValueOnce(new Response("{}"));
   vi.stubGlobal("fetch", fetch);
-  const call = () => kind === "json" ? postJson("https://api.groq.com/openai/v1/chat/completions", "dummy", {}) : postMultipart("https://api.groq.com/openai/v1/audio/transcriptions", "dummy", new FormData());
+  const call = () => kind === "json" ? postJson("https://api.groq.com/openai/v1/chat/completions", "dummy", {}, { timeoutMs: 180_000 }) : postMultipart("https://api.groq.com/openai/v1/audio/transcriptions", "dummy", new FormData(), { timeoutMs: 120_000 });
   await expect(call()).rejects.toThrow(); expect(keyStatus.invalid()).toContain("groq");
   await call(); expect(keyStatus.invalid()).not.toContain("groq");
 });

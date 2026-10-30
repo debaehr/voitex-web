@@ -136,6 +136,20 @@ describe("meeting HTTP contract and storage", () => {
 });
 
 describe("meeting jobs", () => {
+  it.each(["recording", "upload"])("uses selected STT, fallback and text models for %s", async source => {
+    await saveSettings({ protocol: "anthropic", summary: "openai" }, {
+      meetingStt: { provider: "mistral", model: "voxtral-mini-transcribe-next" },
+      meetingSttFallback: { provider: "assemblyai", model: "universal-2" },
+      models: { protocol: "claude-selected", summary: "gpt-5-mini" },
+    });
+    const { create, chunk, finish, request, service } = await start();
+    const id = await create(source); await chunk(id); await finish(id);
+    expect(transcribeMeeting).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      provider: "mistral", model: "voxtral-mini-transcribe-next", fallback: { provider: "assemblyai", model: "universal-2" },
+    }));
+    await request(`/meetings/${id}/protocol`, "POST"); await service.idle();
+    expect(processTranscript).toHaveBeenCalledWith(source === "recording" ? "anthropic" : "openai", expect.objectContaining({ model: source === "recording" ? "claude-selected" : "gpt-5-mini" }));
+  });
   it.each(["recording", "upload"])("persists the complete status sequence and uses the configured %s prompt/provider", async source => {
     await saveSettings({ meetings: "assemblyai" });
     const statuses: string[] = []; const write = persistence.writeJsonFile;
@@ -315,7 +329,7 @@ describe("speaker naming before the protocol", () => {
     const naming = await finish(id);
     expect(naming).toMatchObject({ participants: ["Anna", "BEN"], status: "naming", progress: 100, protocol: "", job: "protocol" });
     expect(processTranscript).not.toHaveBeenCalled();
-    expect(transcribeMeeting).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ contextBias: ["Voitex", "Anna", "BEN"], meetingFallback: false }));
+    expect(transcribeMeeting).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ contextBias: ["Voitex", "Anna", "BEN"], fallback: null }));
     const response = await request(`/meetings/${id}/protocol`, "POST", { speakerNames: { "1:raw-B": " Anna ", "1:raw-A": "Ben" } });
     expect(response.status).toBe(202); expect(await response.json()).toEqual({ status: "queued" }); await service.idle();
     const done = await service.get(id); expect(done.status).toBe("done"); expect(done.speakerNames).toEqual({ "1:raw-B": "Anna", "1:raw-A": "Ben" });
@@ -367,7 +381,7 @@ describe("speaker naming before the protocol", () => {
   it.each([undefined, false, true])("passes only the explicit meetingFallback opt-in from persisted settings (%s)", async meetingFallback => {
     await saveSettings({}, meetingFallback === undefined ? {} : { meetingFallback });
     const { create, chunk, finish } = await start(); const id = await create(); await chunk(id); await finish(id);
-    expect(transcribeMeeting).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ meetingFallback: meetingFallback === true }));
+    expect(transcribeMeeting).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ fallback: meetingFallback === true ? { provider: "assemblyai", model: "universal-3-5-pro" } : null }));
   });
   it("caps combined lexicon and participant terms with case-insensitive deduplication", async () => {
     await saveSettings({}, { lexicon: [{ spoken: "", correct: "Anna" }, { correct: "ANNA" }, ...Array.from({ length: 98 }, (_, n) => ({ correct: `Term${n}` }))] });
@@ -381,7 +395,7 @@ describe("speaker naming before the protocol", () => {
     expect((await service.get(id)).job).toBe("transcribe");
     expect((await request(`/meetings/${id}/retry`, "POST", { provider: "assemblyai" })).status).toBe(202); await service.idle();
     expect((await service.get(id)).status).toBe("naming");
-    expect(transcribeMeeting.mock.calls.at(-1)![1]).toMatchObject({ provider: "assemblyai", meetingFallback: false });
+    expect(transcribeMeeting.mock.calls.at(-1)![1]).toMatchObject({ provider: "assemblyai", fallback: null });
     processTranscript.mockRejectedValueOnce(new Error("private-protocol-key"));
     expect((await request(`/meetings/${id}/protocol`, "POST")).status).toBe(202); await service.idle();
     expect(await service.get(id)).toMatchObject({ status: "error", job: "protocol", error: "Meeting protocol generation failed." });

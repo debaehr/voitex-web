@@ -1,3 +1,5 @@
+import { deriveModelSettings } from "./model-settings.js";
+import { defaultModel } from "./providers/models.js";
 import { ClaudeProviderError } from "./providers/anthropic.js";
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, open, rename, rm, stat } from "node:fs/promises";
@@ -420,8 +422,10 @@ export class MeetingService {
           const result = await transcribeMeeting(join(this.partDirectory(id, part.part), audioName(part)), {
             language: meeting.language, contextBias, durationSeconds: partDuration(part) || (meeting.parts.length === 1 ? meeting.durationSeconds : undefined),
             contentType: part.contentType,
-            meetingFallback: settings.meetingFallback === true,
-            provider: meeting.requestedProvider ?? (settings.providers?.meetings === "assemblyai" ? "assemblyai" : "mistral")
+            provider: meeting.requestedProvider ?? settings.meetingStt.provider as MeetingProvider,
+            model: meeting.requestedProvider && meeting.requestedProvider !== settings.meetingStt.provider
+              ? defaultModel(meeting.requestedProvider, "meetings") : settings.meetingStt.model,
+            fallback: settings.meetingSttFallback as { provider: MeetingProvider; model: string } | null
           });
           const segments = originalSpeakers(result.segments.map(segment => ({
             ...segment, text: applyLexicon(segment.text, lexicon).trim(), part: part.part
@@ -465,7 +469,7 @@ export class MeetingService {
         const language = new Intl.DisplayNames(["de"], { type: "language" }).of(meeting.protocolLanguage) ?? meeting.protocolLanguage;
         instructions += `\n\nSchreibe ${task === "protocol" ? "das gesamte Protokoll" : "die gesamte Zusammenfassung"} auf ${language}. Übersetze auch Zitate. Namen, Firmen- und Produktnamen sowie Lexikon-Begriffe bleiben unverändert.`;
       }
-      const result = await processTranscript(provider, { transcript, mode: "formal", task, instructions });
+      const result = await processTranscript(provider, { transcript, mode: "formal", task, instructions, model: settings.models[task] });
       await this.change(id, current => {
         current.protocol = result.text; current.protocolProvider = result.provider; current.protocolModel = result.model;
         current.status = "done"; current.progress = 100; current.completedAt = new Date().toISOString();
@@ -486,12 +490,12 @@ export class MeetingService {
       } catch (failure) { if (!(failure instanceof MeetingError && failure.status === 404)) throw failure; }
     }
   }
-  private async settings(): Promise<{ providers?: Record<string, unknown>; prompts?: Record<string, unknown>; lexicon?: unknown[]; meetingFallback?: boolean }> {
+  private async settings() {
     const settings = await readJsonFile(join(this.dataDir, "settings.json"));
     if (settings !== null && !isRecord(settings)) throw new Error("Invalid settings file.");
-    if (!settings) return {};
+    if (!settings) return { ...deriveModelSettings({}), providers: {} as Record<string, unknown>, prompts: {} as Record<string, unknown>, lexicon: [] as unknown[] };
     if (settings.providers !== undefined && !isRecord(settings.providers) || settings.prompts !== undefined && !isRecord(settings.prompts)) throw new Error("Invalid settings file.");
-    return { providers: settings.providers, prompts: settings.prompts, lexicon: Array.isArray(settings.lexicon) ? settings.lexicon : [], meetingFallback: settings.meetingFallback === true };
+    return { ...deriveModelSettings(settings), providers: settings.providers as Record<string, unknown> | undefined, prompts: settings.prompts as Record<string, unknown> | undefined, lexicon: Array.isArray(settings.lexicon) ? settings.lexicon : [] };
   }
 }
 function partDuration(part: MeetingPart): number {

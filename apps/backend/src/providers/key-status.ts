@@ -1,3 +1,4 @@
+import { updateModels } from "./models.js";
 export const providerIds = ["openai", "mistral", "groq", "assemblyai", "anthropic"] as const;
 export type ProviderId = typeof providerIds[number];
 const endpoints: Record<ProviderId, string> = {
@@ -53,9 +54,13 @@ export class KeyStatus {
           headers: id === "anthropic" ? { "x-api-key": state.key, "anthropic-version": "2023-06-01" } : { Authorization: id === "assemblyai" ? state.key : `Bearer ${state.key}` }, signal: controller.signal
         });
         // A newer real request or changed key must win over a stale background check.
-        if (this.state(id) === state && state.revision === revision) this.record(id, response.status);
-        await response.body?.cancel();
-      } catch { /* Transport errors say nothing about the key's validity. */ }
+        if (this.state(id) === state && state.revision === revision) {
+          this.record(id, response.status);
+          if (!response.ok) await response.body?.cancel();
+          try { updateModels(id, response.ok ? await response.json() : null, state.key); }
+          catch { updateModels(id, null, state.key); }
+        } else await response.body?.cancel();
+      } catch { if (this.state(id) === state) updateModels(id, null, state.key); }
       finally { (this.options.clearTimeout ?? clearTimeout)(timeout); }
     }));
   }

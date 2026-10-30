@@ -67,8 +67,9 @@ it.each([{ stt: ["mistral"] }, { stt: ["openai"] }])("shows Claude only in text 
     customModes: [{ id: "custom-test", label: "Custom", prompt: "Custom", provider: "anthropic" }] };
   context.current = { settings, defaults: settings, providers: { stt, llm: ["mistral", "anthropic"], meetings: ["mistral"] }, status: "ready", saving: false, save: vi.fn() };
   const html = renderToStaticMarkup(<SettingsView theme="light" onThemeChange={() => {}} onDirtyChange={() => {}} />);
-  expect(html.match(/Spracherkennung über /g)).toHaveLength(5);
-  expect(html).toContain(`Spracherkennung über ${stt.includes("mistral") ? "Mistral" : "OpenAI"}`);
+  expect(html).toContain("Nachbearbeitung je Modus");
+  expect(html).toContain(`id="provider-dictation-stt"`);
+  expect(html).toContain(`value="${stt.includes("mistral") ? "mistral" : "openai"}" selected=""`);
   for (const id of [...Object.keys(modes), "custom-test", "meetings"]) {
     const row = html.match(new RegExp(`<select[^>]*id="provider-${id}"[^>]*>([^]*?)</select>`))?.[1];
     if (id === "meetings") expect(row).not.toContain("Claude");

@@ -31,19 +31,20 @@ afterEach(async () => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGl
 
 it("sends diarization, segment timestamps, explicit language, bounded correct lexicon terms and a long timeout", async () => {
   const timeout = vi.spyOn(AbortSignal, "timeout");
-  const result = await transcribeMeeting(file, { language: "hr", contentType: "audio/webm", contextBias: ["  Voitex  ", "voitex", "", ...Array.from({ length: 110 }, (_, n) => `Term${n}`)] });
+  const result = await transcribeMeeting(file, { language: "hr", contentType: "audio/webm", contextBias: ["  Voitex  ", "voitex", "", "Marcus Hinzen,Anna", "MARCUS\tanna", ...Array.from({ length: 110 }, (_, n) => `Term${n}`)] });
   expect(result).toEqual({ provider: "mistral", model: "voxtral-mini-transcribe-3", attempts: [{ provider: "mistral", ok: true }], segments: [{ speaker: "spk_2", start: 0.5, end: 1.5, text: "Hello" }] });
   const form = calls[0].init!.body as FormData;
   expect(form.get("model")).toBe("voxtral-mini-transcribe-3"); expect(form.get("diarize")).toBe("true");
   expect(form.get("timestamp_granularities")).toBe("segment"); expect(form.get("language")).toBe("hr");
-  expect(form.getAll("context_bias")).toHaveLength(100); expect(form.getAll("context_bias")[0]).toBe("Voitex");
+  expect(form.getAll("context_bias")).toHaveLength(100); expect(form.getAll("context_bias").slice(0, 4)).toEqual(["Voitex", "Marcus", "Hinzen", "Anna"]);
+  expect(form.getAll("context_bias").every(term => typeof term === "string" && !/[\s,]/.test(term))).toBe(true);
   expect(form.get("file")).toMatchObject({ name: "test.webm", type: "audio/webm" });
   expect(timeout).toHaveBeenCalledWith(30 * 60 * 1000);
 });
 it.each([undefined, "auto"])("omits Mistral language for %s and supports the configured model", async language => {
-  vi.stubEnv("MISTRAL_MEETING_MODEL", "custom-model");
+  vi.stubEnv("MISTRAL_MEETING_MODEL", "custom-transcribe-model");
   const result = await transcribeMeeting(file, { language });
-  expect((calls[0].init!.body as FormData).has("language")).toBe(false); expect(result.model).toBe("custom-model");
+  expect((calls[0].init!.body as FormData).has("language")).toBe(false); expect(result.model).toBe("custom-transcribe-model");
 });
 it.each(["error", "missing-key", "over-three-hours"])("falls back to AssemblyAI for %s", async reason => {
   if (reason === "error") mistralError = true;
@@ -150,7 +151,8 @@ it.each(["universal-2", "universal-3-5-pro", "unknown-model"])("sends keyterms_p
   if (model === "unknown-model") expect(body).not.toHaveProperty("keyterms_prompt");
   else {
     expect(body.keyterms_prompt.slice(0, 2)).toEqual(["Voitex", "Anna"]);
-    expect(body.keyterms_prompt).toHaveLength(99);
+    expect(body.keyterms_prompt).toHaveLength(100);
+    expect(body.keyterms_prompt.slice(2, 9)).toEqual(["a", "b", "c", "d", "e", "f", "g"]);
     expect(body.keyterms_prompt).not.toContain("a b c d e f g");
   }
   expect(body).not.toHaveProperty("word_boost");

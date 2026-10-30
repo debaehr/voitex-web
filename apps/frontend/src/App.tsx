@@ -9,7 +9,8 @@ import { readPreference, writePreference } from "./lib/device-preferences";
 import { useRecorder } from "./lib/useRecorder";
 import { useMeetingRecorder } from "./lib/useMeetingRecorder";
 import { MicrophoneGate } from "./lib/microphone";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { readSidebarCollapsed, writeSidebarCollapsed } from "./lib/sidebar";
 import { OverlayBar, type OverlayMessage } from "./components/OverlayBar";
 import { ConfirmDialog } from "./components/Dialog";
 import { SettingsProvider, useSettings } from "./lib/settings-context";
@@ -46,6 +47,7 @@ function AppContent() {
   const [pendingSection, setPendingSection] = useState<Section | null>(null);
   const [section, setSection] = useState<Section>("dictation");
   const [moreOpen, setMoreOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed);
   const [theme, setTheme] = useTheme();
   const modes = useMemo(() => availableDictationModes(settings), [settings]);
   // Wait for server settings before validating a saved custom id.
@@ -157,14 +159,14 @@ function AppContent() {
 
   const renderNav = (entries: NavEntry[]) =>
     entries.map(({ id, label, icon: Icon }) => (
-      <button key={id} type="button" className="nav-item" aria-current={section === id ? "page" : undefined} onClick={() => navigate(id)}>
+      <button key={id} type="button" className="nav-item" aria-label={label} title={label} aria-current={section === id ? "page" : undefined} onClick={() => navigate(id)}>
         <Icon aria-hidden />
         {label}
       </button>
     ));
 
   return (
-    <div className="app">
+    <div className={cx("app", sidebarCollapsed && "sidebar-collapsed")}>
       {pendingSection !== null ? (
         <ConfirmDialog
           title="Änderungen verwerfen?"
@@ -180,7 +182,12 @@ function AppContent() {
         </ConfirmDialog>
       ) : null}
       <aside className="sidebar">
-        <div className="sidebar-brand">voitex</div>
+        <div className="sidebar-brand"><span>voitex</span><button type="button" className="sidebar-toggle"
+          aria-label={sidebarCollapsed ? "Menü ausklappen" : "Menü einklappen"} aria-expanded={!sidebarCollapsed}
+          title={sidebarCollapsed ? "Menü ausklappen" : "Menü einklappen"} onClick={() => {
+            const collapsed = !sidebarCollapsed;
+            setSidebarCollapsed(collapsed); writeSidebarCollapsed(collapsed);
+          }}>{sidebarCollapsed ? <PanelLeftOpen aria-hidden /> : <PanelLeftClose aria-hidden />}</button></div>
         <nav className="sidebar-nav top" aria-label="Hauptnavigation">
           {renderNav(navTop)}
         </nav>

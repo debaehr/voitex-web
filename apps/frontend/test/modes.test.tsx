@@ -26,7 +26,7 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe("mode drafts and available modes", () => {
   it("normalizes missing additive fields without altering old settings or defaults", () => {
     const before = structuredClone(defaults);
-    expect(mergeWithDefaults(defaults, defaults)).toEqual({ ...defaults, customModes: [], hiddenModes: [] });
+    expect(mergeWithDefaults(defaults, defaults)).toMatchObject({ ...defaults, customModes: [], hiddenModes: [] });
     expect(mergeWithDefaults(null, defaults).customModes).toEqual([]);
     expect(defaults).toEqual(before);
     expect(defaults).not.toHaveProperty("customModes");
@@ -147,8 +147,8 @@ it("uses a recorded custom snapshot despite editing or deletion, preserving targ
   settings.customModes = [];
   const api = fake();
   const result = await runDictation({ ...snapshot, audio: new Blob(), durationSeconds: 2, api });
-  expect(api.transcribe).toHaveBeenCalledWith(expect.objectContaining({ mode: "original", provider: "groq", language: "de" }));
-  expect(api.process).toHaveBeenCalledExactlyOnceWith({ transcript: "Corrected", mode: "original", provider: "groq", instructions: custom.prompt, targetLanguage: "hr" });
+  expect(api.transcribe).toHaveBeenCalledWith(expect.objectContaining({ mode: "original", provider: "openai", language: "de" }));
+  expect(api.process).toHaveBeenCalledExactlyOnceWith({ transcript: "Corrected", mode: "original", provider: "groq", instructions: custom.prompt, targetLanguage: "hr", model: "llama-3.3-70b-versatile" });
   expect(result).toMatchObject({ mode: custom.id, modeLabel: "Kundenmail", targetLanguage: "hr", text: "Final" });
 });
 it("keeps the custom instructions and label stable during an in-flight transcription", async () => {
@@ -170,7 +170,7 @@ it.each(["source", "en"] as const)("keeps custom snippet handling intact for tar
   expect(result.modeLabel).toBe(custom.label);
   if (targetLanguage === "source") {
     expect(api.translate).not.toHaveBeenCalled(); expect(result.text).toBe("Snippet\nURL/{id}");
-  } else expect(api.translate).toHaveBeenCalledExactlyOnceWith({ text: "Snippet\nURL/{id}", targetLanguage, provider: "groq" });
+  } else expect(api.translate).toHaveBeenCalledExactlyOnceWith({ text: "Snippet\nURL/{id}", targetLanguage, provider: "groq", model: "llama-3.3-70b-versatile" });
 });
 it("displays recorded custom labels in metadata and export even after deletion, with legacy fallbacks", () => {
   const entry: HistoryEntry = { id: "h", mode: custom.id, modeLabel: "Recorded name", provider: "Groq", targetLanguage: "hr", text: "Final", raw: "Raw", durationSeconds: 2, createdAt: "2026-10-27" };

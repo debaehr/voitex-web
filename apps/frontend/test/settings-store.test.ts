@@ -37,7 +37,7 @@ describe("confirmed settings store", () => {
     await Promise.all([store.load(), store.load()]);
     expect(api.getSettings).toHaveBeenCalledTimes(1);
     expect(store.snapshot.status).toBe("ready");
-    expect(store.snapshot.settings).toEqual(defaults);
+    expect(store.snapshot.settings).toMatchObject(defaults);
   });
   it("blocks saves after load failure", async () => {
     const api = client();

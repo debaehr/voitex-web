@@ -1,5 +1,5 @@
 import type { TargetLanguage, TranslationLanguage } from "./target-languages";
-import type { HistoryEntry, Provider, Settings } from "./types";
+import type { HistoryEntry, ModelSelection, Provider, Settings } from "./types";
 import { applyLexicon, lexiconPromptTerms } from "./lexicon";
 import { matchSnippet } from "./snippets";
 import { isLongEnough } from "./recorder";
@@ -7,17 +7,17 @@ import { availableDictationModes, dictationSttProvider } from "./modes";
 import type { BuiltinMode } from "./types";
 export type DictationMode = HistoryEntry["mode"];
 export interface TranscriptionRequest {
-  audio: Blob; mode: BuiltinMode; provider: Exclude<Provider, "anthropic">; language: string; prompt?: string;
+  audio: Blob; mode: BuiltinMode; provider: Exclude<Provider, "anthropic">; language: string; prompt?: string; model?: string; fallback?: ModelSelection | null;
 }
 export interface ProcessingRequest {
-  transcript: string; mode: BuiltinMode; provider: Provider; instructions: string; targetLanguage?: TargetLanguage;
+  transcript: string; mode: BuiltinMode; provider: Provider; instructions: string; targetLanguage?: TargetLanguage; model?: string;
 }
 export interface TranslationRequest {
-  text: string; targetLanguage: TranslationLanguage; provider: Provider;
+  text: string; targetLanguage: TranslationLanguage; provider: Provider; model?: string;
 }
 export interface DictationApi {
   translate: (input: TranslationRequest) => Promise<{ translated: string; provider: string; model: string | null }>;
-  transcribe: (input: TranscriptionRequest) => Promise<{ transcript: string; provider: string }>;
+  transcribe: (input: TranscriptionRequest) => Promise<{ transcript: string; provider: string; model?: string | null }>;
   process: (input: ProcessingRequest) => Promise<{ processed: string; provider: string; model?: string | null }>;
 }
 export type DictationResult = Omit<HistoryEntry, "id" | "createdAt"> & { modeLabel: string };
@@ -42,25 +42,28 @@ export async function runDictation({ audio, durationSeconds, mode, language, tar
   const { provider, prompt: instructions, label: modeLabel } = selected;
   const requestMode = selected.builtin ?? "original";
   onStage?.("Transkribiere …");
-  const sttProvider = dictationSttProvider(provider, sttProviders);
+  const sttProvider = (settings.dictationStt?.provider ?? dictationSttProvider(provider, sttProviders)) as Exclude<Provider, "anthropic">;
+  const model = settings.models?.[mode];
   const transcript = await api.transcribe({
     audio, mode: requestMode, provider: sttProvider, language,
+    ...(settings.dictationStt ? { model: settings.dictationStt.model } : {}),
+    ...(settings.dictationFallback !== undefined ? { fallback: settings.dictationFallback } : {}),
     ...(sttProvider === "openai" ? { prompt: lexiconPromptTerms(settings.lexicon).join(", ").slice(0, 1000) } : {}),
   });
   const raw = transcript.transcript;
   if (!raw.trim()) throw new Error("Kein verwertbarer Text erkannt — bitte erneut versuchen.");
   const corrected = applyLexicon(raw, settings.lexicon);
   const snippet = matchSnippet(corrected, settings.snippets);
-  const metadata = { raw, mode, modeLabel, durationSeconds, ...(targetLanguage !== "source" ? { targetLanguage } : {}) };
+  const metadata = { raw, mode, modeLabel, durationSeconds, ...(transcript.model ? { sttProvider: transcript.provider, sttModel: transcript.model } : {}), ...(targetLanguage !== "source" ? { targetLanguage } : {}) };
   if (snippet) {
     if (targetLanguage === "source") return { ...metadata, text: snippet.text, provider: transcript.provider };
     onStage?.("Übersetze …");
-    const translated = await api.translate({ text: snippet.text, targetLanguage, provider });
+    const translated = await api.translate({ text: snippet.text, targetLanguage, provider, ...(model ? { model } : {}) });
     if (!translated.translated.trim()) throw new Error("Kein verwertbarer Text erkannt — bitte erneut versuchen.");
     return { ...metadata, text: translated.translated, provider: resultProvider(translated) };
   }
   onStage?.("Bearbeite …");
-  const processed = await api.process({ transcript: corrected, mode: requestMode, provider, instructions, targetLanguage });
+  const processed = await api.process({ transcript: corrected, mode: requestMode, provider, instructions, targetLanguage, ...(model ? { model } : {}) });
   if (!processed.processed.trim()) throw new Error("Kein verwertbarer Text erkannt — bitte erneut versuchen.");
   return { ...metadata, text: processed.processed, provider: resultProvider(processed) };
 }

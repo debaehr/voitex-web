@@ -1,3 +1,7 @@
+import { deriveModelSettings, validModelSettings } from "../model-settings.js";
+import { defaultModel, isModelId, modelCatalog } from "../providers/models.js";
+import { checkProviders, validChecks } from "../providers/check.js";
+import { shouldFallback } from "../providers/shared.js";
 import { ClaudeProviderError } from "../providers/anthropic.js";
 import { keyStatus } from "../providers/key-status.js";
 import { Request, Response, Router } from "express";
@@ -7,7 +11,7 @@ import { isProvider, processTranscript, transcribeAudio, WorkMode } from "../pro
 import { defaultPrompts } from "../prompts.js";
 import { readJsonFile, writeJsonFile, withFileLock } from "../persistence.js";
 import { isMeetingProvider, availableMeetingProviders } from "../providers/meetings.js";
-import { contextBiasTerms } from "../context-bias.js";
+import { contextBiasTerms, MAX_CONTEXT_BIAS_TERMS } from "../context-bias.js";
 import { lexiconEntries } from "../lexicon.js";
 
 import { buildTranslationInstructions, isTargetLanguage, isTranslationLanguage } from "../providers/shared.js";
@@ -36,11 +40,16 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
     const configured = ["openai", "mistral", "groq"].filter(provider =>
       Boolean(process.env[`${provider.toUpperCase()}_API_KEY`]?.trim())
     );
-    res.json({ stt: configured, llm: [...configured, ...(process.env.ANTHROPIC_API_KEY?.trim() ? ["anthropic"] : [])], meetings: availableMeetingProviders(), invalid: keyStatus.invalid() });
+    res.json({ stt: configured, llm: [...configured, ...(process.env.ANTHROPIC_API_KEY?.trim() ? ["anthropic"] : [])], meetings: availableMeetingProviders(), invalid: keyStatus.invalid(), models: modelCatalog() });
+  });
+
+  apiRouter.post("/providers/check", (req, res) => {
+    if (!validChecks(req.body)) { sendError(res, 400, "Invalid checks: at most 30 provider/model pairs."); return; }
+    void checkProviders(req.body.checks).then(results => res.json({ results })).catch(() => sendInternalError(res, "Provider check failed."));
   });
 
   apiRouter.get("/settings/defaults", (_req, res) => {
-    res.json({
+    res.json(deriveModelSettings({
       version: 1,
       providers: { ...Object.fromEntries(Object.keys(defaultPrompts).map(mode => [mode, "mistral"])), meetings: "mistral" },
       meetingFallback: false,
@@ -51,7 +60,7 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
       ownSpeakerName: "Ich",
       customModes: [],
       hiddenModes: []
-    });
+    }));
   });
 
   apiRouter.get("/settings", (_req, res) => {
@@ -102,46 +111,55 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
       return;
     }
 
-    const provider = req.body?.provider || "mistral";
-    if (!isProvider(provider) || provider === "anthropic") {
-      sendError(res, 400, "Invalid provider.");
-      return;
-    }
-
     const mode = String(req.body?.mode ?? "formal") as WorkMode;
-    if (!isWorkMode(mode)) {
-      sendError(res, 400, "Invalid mode.");
-      return;
-    }
-
+    if (!isWorkMode(mode)) { sendError(res, 400, "Invalid mode."); return; }
     const prompt = typeof req.body?.prompt === "string" ? req.body.prompt.trim() : undefined;
     if (req.body?.prompt !== undefined && (prompt === undefined || prompt.length > 1000)) {
-      sendError(res, 400, "Invalid prompt: expected at most 1000 characters.");
-      return;
+      sendError(res, 400, "Invalid prompt: expected at most 1000 characters."); return;
     }
-
     try {
-      const settings = provider === "mistral" ? await readJsonFile(settingsPath) : null;
-      const contextBias = contextBiasTerms(lexiconEntries(isRecord(settings) ? settings.lexicon : undefined).map(entry => entry.correct));
-      const result = await transcribeAudio(provider, {
-        buffer: req.file.buffer,
-        filename: req.file.originalname || "recording.webm",
-        mimetype: req.file.mimetype || "audio/webm",
-        language: req.body?.language,
-        ...(provider === "openai" && prompt ? { prompt } : {}),
-        ...(contextBias.length ? { contextBias } : {}),
-        mode
-      });
-
+      const stored = await readJsonFile(settingsPath);
+      const settings = deriveModelSettings(isRecord(stored) ? stored : {});
+      const provider = req.body?.provider ?? settings.dictationStt.provider;
+      const model = req.body?.model ?? (provider === settings.dictationStt.provider ? settings.dictationStt.model : defaultModel(provider, "stt"));
+      let fallback = settings.dictationFallback;
+      if (req.body?.fallback !== undefined) {
+        try { fallback = JSON.parse(req.body.fallback); }
+        catch { sendError(res, 400, "Invalid fallback."); return; }
+      }
+      if (!isProvider(provider) || provider === "anthropic" || !isModelId(model) || !validModelSettings({ dictationFallback: fallback })) {
+        sendError(res, 400, "Invalid transcription selection."); return;
+      }
+      const lexiconTerms = lexiconEntries(isRecord(stored) ? stored.lexicon : undefined).map(entry => entry.correct);
+      const contextBias = contextBiasTerms(lexiconTerms);
+      // OpenAI accepts phrases in its prompt; keep the original lexicon terms intact.
+      const seenPromptTerms = new Set<string>();
+      const lexiconPrompt = lexiconTerms.map(term => term.trim()).filter(term => {
+        const key = term.toLocaleLowerCase("de-DE");
+        if (!key || seenPromptTerms.has(key)) return false;
+        seenPromptTerms.add(key);
+        return true;
+      }).slice(0, MAX_CONTEXT_BIAS_TERMS).join(", ").slice(0, 1000);
+      const input = {
+        buffer: req.file.buffer, filename: req.file.originalname || "recording.webm",
+        mimetype: req.file.mimetype || "audio/webm", language: req.body?.language,
+        // Both providers receive context even when OpenAI is only the fallback.
+        ...(provider === "openai" && (prompt || contextBias.length) ? { prompt: prompt || lexiconPrompt } : {}), contextBias, mode
+      };
+      let result;
+      try { result = await transcribeAudio(provider, { ...input, model }); }
+      catch (error) {
+        if (!fallback || !shouldFallback(error) || fallback.provider === provider && fallback.model === model) throw error;
+        result = await transcribeAudio(fallback.provider as "mistral" | "openai", { ...input, model: fallback.model, ...(fallback.provider === "openai" && (prompt || contextBias.length) ? { prompt: prompt || lexiconPrompt } : {}) });
+      }
       res.json({ transcript: result.text, provider: result.provider, model: result.model });
-    } catch (error) {
-      console.error("Transcription failed", error);
+    } catch {
       sendInternalError(res, "Transcription failed.");
     }
   }
 
   async function handleTranslate(req: Request, res: Response) {
-    const { text, targetLanguage, provider = "mistral" } = req.body ?? {};
+    const { text, targetLanguage, provider = "mistral", model } = req.body ?? {};
     if (typeof text !== "string" || !text.trim()) {
       sendError(res, 400, "Missing text.");
       return;
@@ -150,12 +168,13 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
       sendError(res, 400, "Invalid target language.");
       return;
     }
-    if (!isProvider(provider)) {
+    if (!isProvider(provider) || (req.body?.model !== undefined && !isModelId(req.body.model))) {
       sendError(res, 400, "Invalid provider.");
       return;
     }
     try {
       const result = await processTranscript(provider, {
+        model,
         transcript: text,
         mode: "original",
         instructions: buildTranslationInstructions(targetLanguage)
@@ -182,7 +201,7 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
     }
 
     const provider = req.body?.provider || "mistral";
-    if (!isProvider(provider)) {
+    if (!isProvider(provider) || (req.body?.model !== undefined && !isModelId(req.body.model))) {
       sendError(res, 400, "Invalid provider.");
       return;
     }
@@ -195,7 +214,7 @@ export function createApiRouter(dataDir: string, uploadLimitBytes = DEFAULT_UPLO
         sendError(res, 400, "Invalid target language.");
         return;
       }
-      const result = await processTranscript(provider, { transcript, mode, instructions, translateToEnglish, targetLanguage });
+      const result = await processTranscript(provider, { transcript, mode, instructions, translateToEnglish, targetLanguage, model: req.body?.model });
       res.json({ processed: result.text, provider: result.provider, model: result.model });
     } catch (error) {
       console.error("Processing failed", error instanceof ClaudeProviderError ? error.message : error);
@@ -325,6 +344,7 @@ function isValidSettings(value: unknown): boolean {
   const { providers, prompts } = value;
   if (!isRecord(providers) || !isRecord(prompts)) return false;
   if (value.dictationSpacePause !== undefined && typeof value.dictationSpacePause !== "boolean") return false;
+  if (!validModelSettings(value)) return false;
   if (value.meetingFallback !== undefined && typeof value.meetingFallback !== "boolean") return false;
   const modes = Object.keys(defaultPrompts);
   return modes.every(mode => isProvider(providers[mode])) &&

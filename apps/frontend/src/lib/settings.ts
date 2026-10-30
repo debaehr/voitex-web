@@ -1,10 +1,12 @@
-import { settingModes, type Settings } from "./types";
+import { deriveModelSettings } from "./model-settings";
+import { settingModes, type Providers, type Settings } from "./types";
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 export function mergeWithDefaults(
   partial: unknown,
   defaults: Settings,
+  providers?: Providers,
 ): Settings {
   const result = structuredClone(defaults);
   result.customModes = [];
@@ -50,7 +52,12 @@ export function mergeWithDefaults(
         ? [{ id: row.id, trigger: row.trigger, text: row.text }]
         : [],
     );
-  return result;
+  for (const field of ["models", "dictationStt", "dictationFallback", "meetingStt", "meetingSttFallback"] as const) {
+    // Derive from the saved legacy providers rather than inheriting the new defaults.
+    if (partial[field] !== undefined) Object.assign(result, { [field]: structuredClone(partial[field]) });
+    else delete result[field];
+  }
+  return deriveModelSettings(result, providers);
 }
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;

@@ -1,4 +1,4 @@
-import { outputTokenLimit } from "./shared.js";
+import { outputTokenLimit, processTimeoutMs } from "./shared.js";
 import { modeInstructions } from "../prompts.js";
 import { transcriptionLanguageFields } from "./shared.js";
 import {
@@ -24,7 +24,7 @@ export async function transcribeAudio(input: TranscribeInput): Promise<ProviderR
     response_format: "json"
   });
 
-  const result = await postMultipart<{ text: string }>("https://api.groq.com/openai/v1/audio/transcriptions", apiKey, formData);
+  const result = await postMultipart<{ text: string }>("https://api.groq.com/openai/v1/audio/transcriptions", apiKey, formData, { timeoutMs: 120_000 });
 
   return {
     text: result.text,
@@ -46,7 +46,8 @@ export async function processTranscript(input: ProcessInput): Promise<ProviderRe
         { role: "user", content: input.transcript }
       ],
       max_tokens: outputTokenLimit(input)
-    }
+    },
+    { timeoutMs: processTimeoutMs(input) }
   );
 
   return {

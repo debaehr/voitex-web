@@ -54,7 +54,7 @@ describe("settings", () => {
       },
       defaults,
     );
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       ...defaults,
       providers: { ...modes, formal: "groq" },
       prompts: { ...modes, formal: "" },

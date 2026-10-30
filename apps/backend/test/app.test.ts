@@ -1,3 +1,5 @@
+import { modelCatalog } from "../src/providers/models.js";
+import { deriveModelSettings } from "../src/model-settings.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -39,16 +41,16 @@ describe("API and frontend", () => {
   it("reports configured providers without disclosing keys", async () => {
     const request = await start();
     for (const key of ["OPENAI_API_KEY", "MISTRAL_API_KEY", "GROQ_API_KEY", "ASSEMBLYAI_API_KEY"]) vi.stubEnv(key, "");
-    expect(await (await request("/api/providers")).json()).toEqual({ stt: [], llm: [], meetings: [], invalid: [] });
+    expect(await (await request("/api/providers")).json()).toEqual({ stt: [], llm: [], meetings: [], invalid: [], models: modelCatalog() });
     vi.stubEnv("OPENAI_API_KEY", "secret-openai"); vi.stubEnv("GROQ_API_KEY", "secret-groq"); vi.stubEnv("ASSEMBLYAI_API_KEY", "secret-meeting");
-    expect(await (await request("/api/providers")).json()).toEqual({ stt: ["openai", "groq"], llm: ["openai", "groq"], meetings: ["assemblyai"], invalid: [] });
+    expect(await (await request("/api/providers")).json()).toEqual({ stt: ["openai", "groq"], llm: ["openai", "groq"], meetings: ["assemblyai"], invalid: [], models: modelCatalog() });
     vi.stubEnv("MISTRAL_API_KEY", "secret-mistral");
     const available = await (await request("/api/providers")).json();
     expect(available.stt).toEqual(["openai", "mistral", "groq"]);
     expect(available.meetings).toEqual(["mistral", "assemblyai"]);
     keyStatus.record("mistral", 401); keyStatus.record("assemblyai", 403);
     const invalid = await (await request("/api/providers")).json();
-    expect(invalid).toEqual({ stt: ["openai", "mistral", "groq"], llm: ["openai", "mistral", "groq"], meetings: ["mistral", "assemblyai"], invalid: ["mistral", "assemblyai"] });
+    expect(invalid).toEqual({ stt: ["openai", "mistral", "groq"], llm: ["openai", "mistral", "groq"], meetings: ["mistral", "assemblyai"], invalid: ["mistral", "assemblyai"], models: modelCatalog() });
     expect(JSON.stringify(invalid)).not.toContain("secret-");
     keyStatus.record("mistral", 200); keyStatus.record("assemblyai", 200);
   });
@@ -101,7 +103,7 @@ describe("API and frontend", () => {
 
 describe("settings", () => {
   it("returns the complete default shape and persists atomically with backup", async () => {
-    const request = await start(); expect(await (await request("/api/settings/defaults")).json()).toEqual({ ...settings(), providers: Object.fromEntries([...modes, "meetings"].map(mode => [mode, "mistral"])), meetingFallback: false, dictationSpacePause: false, customModes: [], hiddenModes: [] });
+    const request = await start(); expect(await (await request("/api/settings/defaults")).json()).toEqual(deriveModelSettings({ ...settings(), providers: Object.fromEntries([...modes, "meetings"].map(mode => [mode, "mistral"])), meetingFallback: false, dictationSpacePause: false, customModes: [], hiddenModes: [] }));
     expect(Object.keys(defaultPrompts)).toEqual(modes);
     expect(Object.values(defaultPrompts).every(value => typeof value === "string" && value.length > 0)).toBe(true);
     expect((await request("/api/settings", "PUT", settings())).status).toBe(200);
@@ -229,7 +231,7 @@ it("offers Claude only for text and validates its settings without changing the 
   const request = await start();
   keyStatus.record("anthropic", 401);
   const response = await (await request("/api/providers")).json();
-  expect(response).toEqual({ llm: ["anthropic"], stt: [], meetings: [], invalid: ["anthropic"] });
+  expect(response).toEqual({ llm: ["anthropic"], stt: [], meetings: [], invalid: ["anthropic"], models: modelCatalog() });
   expect(JSON.stringify(response)).not.toContain("secret-anthropic");
   keyStatus.record("anthropic", 200);
   const body = { ...settings(), providers: Object.fromEntries(modes.map(mode => [mode, "anthropic"])),

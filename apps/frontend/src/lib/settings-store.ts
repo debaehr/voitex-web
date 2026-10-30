@@ -50,7 +50,7 @@ export class SettingsStore {
         status: "ready",
         providers,
         defaults,
-        settings: mergeWithDefaults(partial, defaults),
+        settings: mergeWithDefaults(partial, defaults, providers),
       });
     } catch (error) {
       this.update({
