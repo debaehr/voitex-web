@@ -113,6 +113,19 @@ textarea {
   color: inherit;
 }
 
+/* Windows native select popups need explicit theme colors to keep text readable. */
+select option,
+select optgroup {
+  background-color: var(--card);
+  color: var(--card-foreground);
+}
+
+select option:disabled,
+select optgroup:disabled,
+select optgroup:disabled option {
+  color: var(--muted-foreground);
+}
+
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
