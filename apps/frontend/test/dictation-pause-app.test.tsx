@@ -91,7 +91,7 @@ it("edits and saves the space pause setting from the Diktat settings section", a
     return SettingsView({ theme: "light", onThemeChange: vi.fn(), onDirtyChange: vi.fn() });
   };
   const setting = find(renderSettings(), n => n.props?.control?.type === Switch).props.control;
-  expect(setting.props.label).toBe("Leertaste pausiert und setzt das Diktat fort");
+  expect(setting.props.label).toBe("Leertaste pausiert und setzt Aufnahmen fort (Diktat und Meetings)");
   expect(setting.props.checked).toBe(true);
   setting.props.onCheckedChange(false);
   const tree = renderSettings();

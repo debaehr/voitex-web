@@ -1322,7 +1322,7 @@ textarea {
 }
 .overlay-pause:hover { background: var(--capsule-bg-hover); }
 .overlay-recording .overlay-stop { width: 44px; height: 44px; }
-.overlay-time.is-paused { animation: dictation-paused 2s ease-in-out infinite; }
+.overlay-time.is-paused, .meeting-time.is-paused { animation: dictation-paused 2s ease-in-out infinite; }
 @keyframes dictation-paused { 50% { opacity: .55; } }
 .overlay-recovery { width: min(340px, calc(100vw - 24px)); padding: 16px; line-height: 1.5; }
 .overlay-recovery-action {
@@ -1331,5 +1331,5 @@ textarea {
 }
 .overlay-recovery-action:hover { background: var(--capsule-bg-hover); }
 @media (prefers-reduced-motion: reduce) {
-  .overlay-time.is-paused { animation: none; }
+  .overlay-time.is-paused, .meeting-time.is-paused { animation: none; }
 }

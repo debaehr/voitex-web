@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
+import { fixture } from "./meeting-fixture";
+vi.mock("../src/lib/settings-context", () => ({ useSettings: () => ({ settings: { dictationSpacePause: false } }) }));
 import { renderToStaticMarkup } from "react-dom/server";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { ProtocolView } from "../src/views/ProtocolView";
 import { OverlayBar } from "../src/components/OverlayBar";
 import { initialMeetingSnapshot, type MeetingRecorder } from "../src/lib/meeting-recorder";
@@ -47,4 +50,38 @@ it("shows explicit display permission choices, two meters and the ended banner",
   const html = renderToStaticMarkup(<ProtocolView state={{ ...initialMeetingSnapshot, phase: "recording", systemAudio: true, systemAudioEnded: true }} controller={controller} language="de" dictationActive={false} />);
   expect(html).toContain('aria-label="Mikrofonpegel"'); expect(html).toContain('aria-label="Computerpegel"');
   expect(html).toContain("Computerton wird nicht mehr aufgenommen"); expect(html).toContain("Erneut freigeben"); expect(html).toContain("Aufnahme läuft");
+});
+
+it.each([true, false])("replaces all meters with an announced pause while retaining duration and secured time (system audio: %s)", systemAudio => {
+  const state = { ...initialMeetingSnapshot, phase: "paused" as const, systemAudio, elapsed: 65, secured: 60, levels: [.8], computerLevels: [.7] };
+  const html = renderToStaticMarkup(<ProtocolView state={state} controller={controller} language="de" dictationActive={false} />);
+  expect(html).toContain('role="status">Pausiert</span>');
+  expect(html).not.toContain('role="meter"');
+  expect(html).toContain('class="meeting-time is-paused" aria-label="Aufnahmedauer">00:01:05');
+  expect(html).toContain('gesichert bis 00:01:00');
+  const resumed = renderToStaticMarkup(<ProtocolView state={{ ...state, phase: "recording" }} controller={controller} language="de" dictationActive={false} />);
+  expect(resumed).toContain('role="meter"'); expect(resumed).not.toContain('is-paused');
+});
+
+
+it("keeps the displayed duration frozen during pause and advances it after resume", async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  const markup = () => renderToStaticMarkup(<ProtocolView state={f.state()} controller={f.controller} language="de" dictationActive={false} />);
+  try {
+    await f.controller.initialize(); await f.controller.start("", "de");
+    await vi.advanceTimersByTimeAsync(5000); await f.controller.pause();
+    expect(markup()).toContain('aria-label="Aufnahmedauer">00:00:05');
+    await vi.advanceTimersByTimeAsync(12000);
+    expect(markup()).toContain('aria-label="Aufnahmedauer">00:00:05');
+    expect(markup()).toContain('role="status">Pausiert</span>');
+    await f.controller.resume(); await vi.advanceTimersByTimeAsync(3000);
+    expect(markup()).toContain('aria-label="Aufnahmedauer">00:00:08');
+    expect(markup()).not.toContain('is-paused');
+  } finally { await f.controller.dispose(); vi.clearAllTimers(); vi.useRealTimers(); }
+});
+it("shares the subtle timer animation and disables it for reduced motion", () => {
+  const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  expect(css).toContain('.overlay-time.is-paused, .meeting-time.is-paused { animation: dictation-paused 2s ease-in-out infinite; }');
+  expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.overlay-time\.is-paused, \.meeting-time\.is-paused \{ animation: none; \}/);
 });

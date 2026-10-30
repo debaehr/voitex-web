@@ -1,3 +1,4 @@
+import { isRecordingSpaceKey } from "../lib/recording-space-key";
 import { targetLanguages, type TargetLanguage } from "../lib/target-languages";
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Check, CheckCircle2, ChevronDown, Pause, Play } from "lucide-react";
@@ -76,8 +77,7 @@ export function OverlayBar(props: OverlayBarProps) {
   return (
     <div className="overlay" ref={rootRef} role="group" tabIndex={0} aria-label="Diktataufnahme" onKeyDown={event => {
       // Handle Space here so typing elsewhere never controls the microphone.
-      if (event.key !== " " || event.repeat || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey ||
-        !event.currentTarget.contains(event.target as Node) || !props.dictationSpacePause ||
+      if (!isRecordingSpaceKey(event) || !props.dictationSpacePause ||
         !props.recording || !props.pauseSupported || props.busyText) return;
       event.preventDefault(); props.onPauseToggle?.();
     }}>

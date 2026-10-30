@@ -1,3 +1,5 @@
+import { isRecordingSpaceKey } from "../lib/recording-space-key";
+import { useSettings } from "../lib/settings-context";
 import { readSystemAudioPreference, writeSystemAudioPreference } from "../lib/meeting-browser";
 import { useState } from "react";
 import { Circle, Info, Pause, Play, Square } from "lucide-react";
@@ -17,6 +19,7 @@ interface Props {
 }
 const statuses = { queued: "Wartet auf Verarbeitung", transcribing: "Wird transkribiert", naming: "Namen zuordnen", summarizing: "Protokoll wird erstellt", done: "Fertig", error: "Verarbeitung fehlgeschlagen" };
 export function ProtocolView({ state, controller, language, dictationActive, ownSpeakerName }: Props) {
+  const { settings } = useSettings();
   const [systemAudio, setSystemAudio] = useState(readSystemAudioPreference);
   const [title, setTitle] = useState("");
   const [participants, setParticipants] = useState("");
@@ -75,18 +78,24 @@ export function ProtocolView({ state, controller, language, dictationActive, own
         </CardContent>
       </Card> : null}
 
-      {recovering || recording || state.phase === "finishing" ? <Card>
+      {recovering || recording || state.phase === "finishing" ? <Card tabIndex={0} role="group" aria-label="Meeting-Aufnahme" onKeyDown={event => {
+        if (!settings?.dictationSpacePause || !recording || !isRecordingSpaceKey(event)) return;
+        // Suppress native button activation, especially the destructive finish action.
+        event.preventDefault();
+        if (state.phase === "paused") void controller?.resume();
+        else void controller?.pause();
+      }}>
         <CardHeader>
           <CardTitle>{state.phase === "interrupted" ? "Unterbrochen" : state.phase === "recovery" ? "Nicht abgeschlossene Aufnahme" : state.phase === "finishing" ? "Aufnahme wird gesichert" : state.phase === "paused" ? "Aufnahme pausiert" : "Aufnahme läuft"}</CardTitle>
           <CardDescription>{state.meeting?.title || "Sitzung ohne Titel"}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="row between wrap">
-            <span className="meeting-time" aria-label="Aufnahmedauer">{meetingClock(state.elapsed)}</span>
-            <div className="row wrap">
+            <span className={`meeting-time${state.phase === "paused" ? " is-paused" : ""}`} aria-label="Aufnahmedauer">{meetingClock(state.elapsed)}</span>
+            {state.phase === "paused" ? <span className="overlay-paused" role="status">Pausiert</span> : <div className="row wrap">
               <LevelMeter label="Mikrofon" levels={state.levels} showLabel={state.systemAudio} />
               {state.systemAudio ? <LevelMeter label="Computer" levels={state.computerLevels} showLabel /> : null}
-            </div>
+            </div>}
           </div>
           {recording && state.systemAudioEnded ? <div className="data-notice stack" role="status">
             <p>Computerton wird nicht mehr aufgenommen</p>

@@ -1,6 +1,6 @@
 # SESSION STATE — voitex-web
 
-> **Letztes Update:** 301026_1030 · **von:** Claude Opus 5.5
+> **Letztes Update:** 301026_1100 · **von:** Claude Opus 5.5
 > **Branch:** main · **Node:** tool-01
 
 <!--
@@ -29,7 +29,7 @@ Abnahme A3 (Teams-Desktop mit Jabra, Tab-Audio, Freigabe neu, minimiert) offen.
 Freigegeben 29.10.: `specs/changes/2026-10-29-sprecher-sprache-dateiname.md` (Sprecher von Hand,
 Protokollsprache, MoM-Dateinamen, Audio 7 Tage), Lauf 6 fertig und live; Abnahme A4 offen.
 Freigegeben 30.10.: `specs/changes/2026-10-30-diktat-pause.md` (Pause im Diktat, Leertaste als Einstellung), Lauf 7 fertig und live; Abnahme A3 offen.
-Freigegeben 30.10.: `specs/changes/2026-10-30-meeting-pause.md` (Leertaste + Pausenanzeige Meetings), Lauf 8 an Codex (low).
+Freigegeben 30.10.: `specs/changes/2026-10-30-meeting-pause.md` (Leertaste + Pausenanzeige Meetings), Lauf 8 fertig und live; Abnahme A3 offen.
 
 ---
 

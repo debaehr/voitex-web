@@ -164,9 +164,9 @@ export function SettingsView({
           disabled={status !== "ready" || saving}
         >
           {activeId === "dictation" ? (
-            <SettingRow title="Leertaste pausiert und setzt das Diktat fort"
-              description="Gilt, wenn der Fokus auf der Diktatleiste liegt."
-              control={<Switch label="Leertaste pausiert und setzt das Diktat fort" checked={draft.dictationSpacePause ?? false}
+            <SettingRow title="Leertaste pausiert und setzt Aufnahmen fort (Diktat und Meetings)"
+              description="Gilt, wenn der Fokus auf der Diktatleiste oder in der Meeting-Aufnahmekarte liegt."
+              control={<Switch label="Leertaste pausiert und setzt Aufnahmen fort (Diktat und Meetings)" checked={draft.dictationSpacePause ?? false}
                 onCheckedChange={checked => update({ ...draft, dictationSpacePause: checked })} />} />
           ) : activeId === "prompts" ? (
             <>
