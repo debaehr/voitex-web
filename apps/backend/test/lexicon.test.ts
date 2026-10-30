@@ -39,3 +39,16 @@ it("deduplicates context terms case-insensitively, preserves order, trims and ca
   expect(terms.slice(0, 3)).toEqual(["Müller", "Anna", "Term0"]);
   expect(terms.at(-1)).toBe("Term97");
 });
+
+
+it("splits whitespace and commas, drops empty parts and keeps the first spelling across terms", () => {
+  const terms = contextBiasTerms([" Marcus Hinzen,Anna\tMüller\n", ",, MARCUS,hinzen ", "mÜLLER Anna", "\u00a0Beta\rGamma", " , "]);
+  expect(terms).toEqual(["Marcus", "Hinzen", "Anna", "Müller", "Beta", "Gamma"]);
+  expect(terms.every(term => term.length > 0 && !/[\s,]/.test(term))).toBe(true);
+});
+
+it("applies the limit to unique words after splitting, including within a single term", () => {
+  const words = Array.from({ length: 110 }, (_, i) => `Word${i}`);
+  expect(contextBiasTerms(["Word0 WORD0", words.join(", "), "Later"]))
+    .toEqual(words.slice(0, MAX_CONTEXT_BIAS_TERMS));
+});
